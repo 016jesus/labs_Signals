@@ -17,11 +17,22 @@ from output_player import OutputPlayer
 
 FS_OPTIONS = [8000, 16000, 22050, 44100, 48000]
 
-def moving_average(x: np.ndarray, M: int) -> np.ndarray:
-    M = max(1, int(M))
-    kernel = np.ones(M, dtype=np.float64) / M
-    y = np.convolve(x.astype(np.float64), kernel, mode="same")
-    return y.astype(np.float32)
+import numpy as np
+
+def moving_average(x, M):
+    N = len(x)
+    y = np.zeros(N)
+    for n in range(N):
+        if n < M:
+            # Para los primeros valores, no hay suficientes muestras pasadas
+            # entonces copiamos directamente o promediamos lo que haya
+            y[n] = np.mean(x[:n+1])
+        else:
+            suma = 0.0
+            for k in range(M):
+                suma += x[n - k]
+            y[n] = suma / M
+    return y
 
 # ------------- Main App -------------
 class App:
