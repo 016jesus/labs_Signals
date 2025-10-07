@@ -17,28 +17,17 @@ from output_player import OutputPlayer
 
 FS_OPTIONS = [8000, 16000, 22050, 44100, 48000]
 
-import numpy as np
-
-def moving_average(x, M):
-    N = len(x)
-    y = np.zeros(N)
-    for n in range(N):
-        if n < M:
-            # Para los primeros valores, no hay suficientes muestras pasadas
-            # entonces copiamos directamente o promediamos lo que haya
-            y[n] = np.mean(x[:n+1])
-        else:
-            suma = 0.0
-            for k in range(M):
-                suma += x[n - k]
-            y[n] = suma / M
-    return y
+def moving_average(x: np.ndarray, M: int) -> np.ndarray:
+    M = max(1, int(M))
+    kernel = np.ones(M, dtype=np.float64) / M
+    y = np.convolve(x.astype(np.float64), kernel, mode="same")
+    return y.astype(np.float32)
 
 # ------------- Main App -------------
 class App:
     def __init__(self, root):
         self.root = root
-        self.root.title("Laboratorio 1 - Player visual (nivel + forma de onda)")
+        self.root.title("Laboratorio 1 - Filtro Promedio Móvil (Peine)")
         self.root.geometry("880x620")
         self.root.minsize(860, 600)
 
@@ -114,8 +103,8 @@ class App:
         ttk.Label(params, text="Duración (s)").grid(row=3, column=0, padx=6, pady=6, sticky="w")
         ttk.Entry(params, textvariable=self.dur, width=12).grid(row=3, column=1, padx=6, pady=6)
 
-        self.raw_chk = ttk.Checkbutton(params, text="Intentar captura sin procesamiento (RAW / exclusivo)", variable=self.raw_capture)
-        self.raw_chk.grid(row=3, column=2, columnspan=2, padx=6, pady=6, sticky="w")
+        # self.raw_chk = ttk.Checkbutton(params, text="Intentar captura sin procesamiento (RAW / exclusivo)", variable=self.raw_capture)
+        # self.raw_chk.grid(row=3, column=2, columnspan=2, padx=6, pady=6, sticky="w")
 
         # --- Acciones captura/filtro ---
         actions = ttk.LabelFrame(main, text="Acciones de señal", padding=10)
@@ -161,7 +150,7 @@ class App:
 
         info = ttk.Frame(main)
         info.pack(fill=tk.X, pady=(6,0))
-        self.status_var = tk.StringVar(value="Graba, aplica filtro si quieres, luego usa el reproductor visual.")
+        self.status_var = tk.StringVar(value="Graba, aplica filtro, luego usa el reproductor visual.")
         ttk.Label(info, textvariable=self.status_var, foreground="#374151").pack(side=tk.LEFT)
 
     # ---------- Enumeración de dispositivos ----------
@@ -250,11 +239,6 @@ class App:
             self.status_var.set("Grabando...")
             dev_idx = self._parse_dev_index(self.selected_device.get())
             extra = None
-            if self.raw_capture.get() and platform.system() == "Windows":
-                try:
-                    extra = sd.WasapiSettings(exclusive=True)
-                except Exception:
-                    extra = None
             x = sd.rec(int(dur * fs), samplerate=fs, channels=1, dtype="float32", device=dev_idx,
                        latency="low", extra_settings=extra)
             sd.wait()
