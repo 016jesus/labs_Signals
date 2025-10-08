@@ -47,7 +47,6 @@ class PanelGraficas(ttk.Frame):
 
     # --------- Métodos de actualización ----------
     def actualizar_xyh(self, n, x, nh, h):
-        """Redibuja la pestaña 'x y h'."""
         # Limpiar
         self.ax_x.clear()
         self.ax_h.clear()
@@ -70,7 +69,6 @@ class PanelGraficas(ttk.Frame):
         self.canvas_xyh.draw()
 
     def actualizar_salidas(self, n, y_conv, y_teo):
-        """Redibuja la pestaña 'salidas'."""
         # Limpiar
         self.ax_teo.clear()
         self.ax_conv.clear()

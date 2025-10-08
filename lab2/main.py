@@ -19,12 +19,11 @@ class VentanaPrincipal(ttk.Window):
         self.title("Sistema Discreto por Convolución")
         self.geometry("1100x600")
 
-        # Layout general: izquierda (controles), derecha (gráficas)
         cont = ttk.Frame(self, padding=12)
         cont.pack(fill="both", expand=True)
 
-        cont.columnconfigure(0, weight=0)  # panel izquierdo
-        cont.columnconfigure(1, weight=1)  # panel derecho (gráficas)
+        cont.columnconfigure(0, weight=0)  
+        cont.columnconfigure(1, weight=1)  
         cont.rowconfigure(0, weight=1)
 
         # ---------- Panel izquierdo: Parámetros ----------
@@ -69,7 +68,7 @@ class VentanaPrincipal(ttk.Window):
             foreground="#aaa",
         ).grid(row=fila + 1, column=0, columnspan=2, sticky="w")
 
-        # ---------- Panel derecho: Gráficas (Notebook) ----------
+        # ---------- Panel derecho: Gráficas ----------
         self.panel_graficas = PanelGraficas(cont)
         self.panel_graficas.grid(row=0, column=1, sticky="nsew", padx=(12, 0))
 
