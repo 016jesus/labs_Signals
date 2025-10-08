@@ -10,24 +10,33 @@ from señales import (
     salida_por_convolucion,
     salida_teorica,
 )
-from ventanas import VentanaXH, VentanaSalida
+from ventanas import PanelGraficas
 
 
 class VentanaPrincipal(ttk.Window):
     def __init__(self):
-        super().__init__(themename="darkly")  # tema moderno oscuro
+        super().__init__(themename="darkly")  # tema moderno
         self.title("Sistema Discreto por Convolución")
-        self.geometry("540x430")
+        self.geometry("1100x600")
 
-        marco = ttk.Frame(self, padding=14)
-        marco.pack(fill="both", expand=True)
+        # Layout general: izquierda (controles), derecha (gráficas)
+        cont = ttk.Frame(self, padding=12)
+        cont.pack(fill="both", expand=True)
+
+        cont.columnconfigure(0, weight=0)  # panel izquierdo
+        cont.columnconfigure(1, weight=1)  # panel derecho (gráficas)
+        cont.rowconfigure(0, weight=1)
+
+        # ---------- Panel izquierdo: Parámetros ----------
+        panel = ttk.Labelframe(cont, text="Parámetros", padding=12, bootstyle=INFO)
+        panel.grid(row=0, column=0, sticky="nsw")
 
         ttk.Label(
-            marco,
-            text="Simulación de sistema discreto:\n x(n)=a e^{bn} u(n), y(n)=c e^{dn} cosh(kn) u(n)",
-            wraplength=500,
+            panel,
+            text="x(n)=a e^{bn} u(n)\ny(n)=c e^{dn} cosh(kn) u(n)",
             font=("Segoe UI", 10, "bold"),
-        ).grid(row=0, column=0, columnspan=2, pady=(0, 10))
+            justify="left",
+        ).grid(row=0, column=0, columnspan=2, pady=(0, 10), sticky="w")
 
         self.var_a = ttk.StringVar(value="1.0")
         self.var_b = ttk.StringVar(value="-0.05")
@@ -45,20 +54,24 @@ class VentanaPrincipal(ttk.Window):
             ("k (cosh en salida)", self.var_k),
             ("N (nº puntos, ≥100)", self.var_N),
         ]:
-            ttk.Label(marco, text=texto).grid(row=fila, column=0, sticky="e", pady=6)
-            ttk.Entry(marco, textvariable=var, width=20).grid(row=fila, column=1, sticky="w")
+            ttk.Label(panel, text=texto).grid(row=fila, column=0, sticky="e", pady=6, padx=(0, 8))
+            ttk.Entry(panel, textvariable=var, width=14).grid(row=fila, column=1, sticky="w")
             fila += 1
 
         ttk.Button(
-            marco, text="Simular y Graficar", bootstyle=SUCCESS, command=self.simular
-        ).grid(row=fila, column=0, columnspan=2, pady=15)
+            panel, text="Simular y Graficar", bootstyle=SUCCESS, command=self.simular
+        ).grid(row=fila, column=0, columnspan=2, pady=14, sticky="ew")
 
         ttk.Label(
-            marco,
+            panel,
             text="Sugerencia: usar b<0 y d±k<0 (|e^{·}|<1) para estabilidad.",
-            wraplength=500,
+            wraplength=220,
             foreground="#aaa",
         ).grid(row=fila + 1, column=0, columnspan=2, sticky="w")
+
+        # ---------- Panel derecho: Gráficas (Notebook) ----------
+        self.panel_graficas = PanelGraficas(cont)
+        self.panel_graficas.grid(row=0, column=1, sticky="nsew", padx=(12, 0))
 
     def leer_parametros(self) -> Tuple[float, float, float, float, float, int]:
         try:
@@ -80,16 +93,18 @@ class VentanaPrincipal(ttk.Window):
         try:
             a, b, c, d, k, N = self.leer_parametros()
         except ValueError as e:
-            messagebox.showerror("Error", str(e))
+            messagebox.showerror("Error en parámetros", str(e))
             return
 
+        # Cálculo de señales
         n, x = señal_entrada(a, b, N)
         nh, h = respuesta_impulso(a, b, c, d, k, N)
         y_conv = salida_por_convolucion(x, h, N)
         ny, y_teo = salida_teorica(c, d, k, N)
 
-        VentanaXH(self, n, x, nh, h)
-        VentanaSalida(self, ny, y_conv, y_teo)
+        # Actualizar paneles de gráficas
+        self.panel_graficas.actualizar_xyh(n, x, nh, h)
+        self.panel_graficas.actualizar_salidas(ny, y_conv, y_teo)
 
 
 if __name__ == "__main__":

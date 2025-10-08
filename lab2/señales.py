@@ -5,7 +5,6 @@ def generar_u(n: np.ndarray) -> np.ndarray:
     return (n >= 0).astype(float)
 
 def señal_entrada(a: float, b: float, N: int) -> Tuple[np.ndarray, np.ndarray]:
-    """x(n) = a e^{bn} u(n)."""
     n = np.arange(N, dtype=float)
     x = a * np.exp(b * n) * generar_u(n)
     return n, x
