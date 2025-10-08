@@ -2,7 +2,6 @@ import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 from tkinter import messagebox
 from typing import Tuple
-import numpy as np
 
 from señales import (
     señal_entrada,
@@ -11,22 +10,27 @@ from señales import (
     salida_teorica,
 )
 from ventanas import PanelGraficas
+from tema import configurar_mpl_con_tema  
 
+THEME = "superhero"  
 
 class VentanaPrincipal(ttk.Window):
     def __init__(self):
-        super().__init__(themename="darkly")  # tema moderno
+        super().__init__(themename=THEME)
+
+        # Sincroniza Matplotlib con la paleta del tema actual
+        self.paleta = configurar_mpl_con_tema(self.style)
+
         self.title("Sistema Discreto por Convolución")
         self.geometry("1100x600")
 
         cont = ttk.Frame(self, padding=12)
         cont.pack(fill="both", expand=True)
-
-        cont.columnconfigure(0, weight=0)  
-        cont.columnconfigure(1, weight=1)  
+        cont.columnconfigure(0, weight=0)
+        cont.columnconfigure(1, weight=1)
         cont.rowconfigure(0, weight=1)
 
-        # ---------- Panel izquierdo: Parámetros ----------
+        # ---- Panel izquierdo (parámetros) ----
         panel = ttk.Labelframe(cont, text="Parámetros", padding=12, bootstyle=INFO)
         panel.grid(row=0, column=0, sticky="nsw")
 
@@ -57,19 +61,18 @@ class VentanaPrincipal(ttk.Window):
             ttk.Entry(panel, textvariable=var, width=14).grid(row=fila, column=1, sticky="w")
             fila += 1
 
-        ttk.Button(
-            panel, text="Simular y Graficar", bootstyle=SUCCESS, command=self.simular
-        ).grid(row=fila, column=0, columnspan=2, pady=14, sticky="ew")
+        ttk.Button(panel, text="Simular y Graficar", bootstyle=SUCCESS, command=self.simular)\
+            .grid(row=fila, column=0, columnspan=2, pady=14, sticky="ew")
 
         ttk.Label(
             panel,
             text="Sugerencia: usar b<0 y d±k<0 (|e^{·}|<1) para estabilidad.",
             wraplength=220,
-            foreground="#aaa",
+            foreground=self.paleta["muted"],
         ).grid(row=fila + 1, column=0, columnspan=2, sticky="w")
 
-        # ---------- Panel derecho: Gráficas ----------
-        self.panel_graficas = PanelGraficas(cont)
+        # ---- Panel derecho (gráficas) ----
+        self.panel_graficas = PanelGraficas(cont, paleta=self.paleta)
         self.panel_graficas.grid(row=0, column=1, sticky="nsew", padx=(12, 0))
 
     def leer_parametros(self) -> Tuple[float, float, float, float, float, int]:
@@ -95,13 +98,11 @@ class VentanaPrincipal(ttk.Window):
             messagebox.showerror("Error en parámetros", str(e))
             return
 
-        # Cálculo de señales
         n, x = señal_entrada(a, b, N)
         nh, h = respuesta_impulso(a, b, c, d, k, N)
         y_conv = salida_por_convolucion(x, h, N)
         ny, y_teo = salida_teorica(c, d, k, N)
 
-        # Actualizar paneles de gráficas
         self.panel_graficas.actualizar_xyh(n, x, nh, h)
         self.panel_graficas.actualizar_salidas(ny, y_conv, y_teo)
 
