@@ -1,0 +1,1 @@
+﻿    mse = np.mean((senal - senal_rec) ** 2)    plt.figure(figsize=(10, 4))    plt.plot(senal, label="Original")    plt.plot(senal_rec, label="Reconstruida", alpha=0.7)    plt.title(f"Comparación de señal de voz (Compresión {porcentaje_retenido}%)")    plt.legend()    plt.show()    print(f"Error cuadrático medio: {mse:.6f}")

@@ -7,7 +7,7 @@ import threading
 from diseno_bilineal import disenar_butterworth_pasabanda_orden2_bilineal
 from biquad import FiltroBiquadOrden2
 from dft_manual import calcular_dft_real
-from graficos_ttk import trazar_espectros_dobles
+from graficos_ttk import trazar_espectros_dobles, mostrar_2x2_matplotlib, mostrar_2x2_en_frame, trazar_2x2_canvas
 from audio_io import grabar_voz, reproducir_audio, guardar_wav, pyaudio
 
 
@@ -35,6 +35,10 @@ class AplicacionFiltro(ttk.Window):
         self.senal_original = []
         self.senal_filtrada = []
         self.biquad = None
+        self.win_2x2 = None
+        self.frame_2x2 = None
+        self.tabs = None
+        self.canvas_2x2 = None
 
         self._crear_gui()
 
@@ -44,6 +48,13 @@ class AplicacionFiltro(ttk.Window):
 
     def _dibujar_espectros_seguro(self, magnitudes_o, magnitudes_f):
         self.after(0, lambda: trazar_espectros_dobles(self.canvas_espectros, magnitudes_o, magnitudes_f))
+
+    def _dibujar_2x2_seguro(self, esp_o, esp_f, fs, fc1, fc2):
+        self.after(0, lambda: trazar_2x2_canvas(self.canvas_2x2,
+                                               self.senal_original,
+                                               self.senal_filtrada,
+                                               esp_o, esp_f,
+                                               fs, fc1, fc2))
 
     # ===================== Construccion GUI =====================
     def _crear_gui(self):
@@ -76,7 +87,8 @@ class AplicacionFiltro(ttk.Window):
         ttk.Button(panel, text="Disenar Filtro", bootstyle="success-outline", command=self.on_disenar).pack(fill="x", pady=4)
         ttk.Button(panel, text="Grabar Voz", bootstyle="secondary-outline", command=self.on_grabar).pack(fill="x", pady=4)
         ttk.Button(panel, text="Filtrar Senal", bootstyle="primary-outline", command=self.on_filtrar).pack(fill="x", pady=4)
-        ttk.Button(panel, text="Visualizar Espectros", bootstyle="warning-outline", command=self.on_visualizar_espectros).pack(fill="x", pady=6)
+        ttk.Button(panel, text="Visualizar Espectros", bootstyle="warning-outline", command=self.on_visualizar_espectros).pack(fill="x", pady=4)
+        ttk.Button(panel, text="Mostrar 2x2 (pestaña)", bootstyle="warning", command=self.on_visualizar_2x2_nuevo).pack(fill="x", pady=6)
 
         ttk.Button(panel, text="Reproducir Original", bootstyle="info", command=self.on_reproducir_original).pack(fill="x", pady=(2, 2))
         ttk.Button(panel, text="Reproducir Filtrada", bootstyle="info", command=self.on_reproducir_filtrada).pack(fill="x", pady=(0, 6))
@@ -95,6 +107,42 @@ class AplicacionFiltro(ttk.Window):
             derecha, bg="#1f2430", highlightthickness=2, highlightbackground="#343b46"
         )
         self.canvas_espectros.pack(fill="both", expand=True, padx=6, pady=6)
+
+        # Segunda ventana: Otras gráficas (2x2)
+        otras = ttk.Labelframe(contenido, text="Otras Graficas (2x2)", bootstyle="secondary", padding=10)
+        otras.pack(side="left", fill="both", expand=True)
+        self.frame_2x2 = ttk.Frame(otras)
+        self.frame_2x2.pack(fill="both", expand=True, padx=6, pady=6)
+
+        # Reconstruir como pestañas y ocultar los contenedores laterales
+        try:
+            derecha.pack_forget()
+            otras.pack_forget()
+        except Exception:
+            pass
+
+        self.tabs = ttk.Notebook(contenido)
+        self.tabs.pack(side="left", fill="both", expand=True)
+
+        # Tab 1: Espectros
+        tab_espectros = ttk.Frame(self.tabs)
+        self.tabs.add(tab_espectros, text="Espectros")
+        derecha2 = ttk.Labelframe(tab_espectros, text="Visualizacion de Espectros", bootstyle="primary", padding=10)
+        derecha2.pack(fill="both", expand=True)
+        self.canvas_espectros = tk.Canvas(
+            derecha2, bg="#1f2430", highlightthickness=2, highlightbackground="#343b46"
+        )
+        self.canvas_espectros.pack(fill="both", expand=True, padx=6, pady=6)
+
+        # Tab 2: 2x2
+        tab_2x2 = ttk.Frame(self.tabs)
+        self.tabs.add(tab_2x2, text="Analisis espectral")
+        lf_2x2 = ttk.Labelframe(tab_2x2, text="Otras Graficas (2x2)", bootstyle="secondary", padding=10)
+        lf_2x2.pack(fill="both", expand=True)
+        self.canvas_2x2 = tk.Canvas(
+            lf_2x2, bg="#1f2430", highlightthickness=2, highlightbackground="#343b46"
+        )
+        self.canvas_2x2.pack(fill="both", expand=True, padx=6, pady=6)
 
     def _fila(self, parent, texto, var):
         f = ttk.Frame(parent)
@@ -187,6 +235,75 @@ class AplicacionFiltro(ttk.Window):
 
         threading.Thread(target=tarea_fft, daemon=True).start()
 
+    def on_visualizar_2x2(self):
+        params = self._leer_parametros()
+        if not params:
+            return
+        fs, fc1, fc2, _ = params
+        if not self.senal_original:
+            messagebox.showwarning("Advertencia", "Debe grabar una senal antes de visualizar.")
+            return
+        if not self.senal_filtrada:
+            messagebox.showwarning("Advertencia", "Debe filtrar la senal antes de visualizar.")
+            return
+
+        # Cerrar ventana previa si existe para reutilizar
+        try:
+            if self.win_2x2 is not None and int(self.win_2x2.winfo_exists()) == 1:
+                self.win_2x2.destroy()
+        except Exception:
+            pass
+
+        # Abrir la ventana con la visualización 2x2 dentro de la misma interfaz
+        try:
+            def _mark_closed():
+                self.win_2x2 = None
+
+            self.win_2x2 = mostrar_2x2_matplotlib(
+                self, self.senal_original, self.senal_filtrada, fs, fc1, fc2, on_close=_mark_closed
+            )
+            # Posicionar como ventana hija de la principal
+            if self.win_2x2 is not None:
+                self.win_2x2.transient(self)
+                self.win_2x2.focus_set()
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo mostrar la vista 2x2:\n{e}")
+
+    # Nueva versión que dibuja en la pestaña 2x2 con Canvas
+    def on_visualizar_2x2_nuevo(self):
+        params = self._leer_parametros()
+        if not params:
+            return
+        fs, fc1, fc2, _ = params
+        if not self.senal_original:
+            messagebox.showwarning("Advertencia", "Debe grabar una senal antes de visualizar.")
+            return
+        if not self.senal_filtrada:
+            messagebox.showwarning("Advertencia", "Debe filtrar la senal antes de visualizar.")
+            return
+
+        self._set_estado_grabacion("Calculando 2x2...", "secondary")
+
+        def tarea_fft_2x2():
+            try:
+                esp_o = calcular_dft_real(self.senal_original, fs)
+                esp_f = calcular_dft_real(self.senal_filtrada, fs)
+                if not esp_o or not esp_f:
+                    self._set_estado_grabacion("Espectros vacios", "warning")
+                    return
+                self._dibujar_2x2_seguro(esp_o, esp_f, fs, fc1, fc2)
+                self._set_estado_grabacion("2x2 listo", "success")
+                try:
+                    if self.tabs is not None:
+                        self.tabs.select(1)
+                except Exception:
+                    pass
+            except Exception as e:
+                self._set_estado_grabacion("Error al graficar 2x2", "danger")
+                self.after(0, lambda: messagebox.showerror("Error", f"Problema al graficar 2x2:\n{e}"))
+
+        threading.Thread(target=tarea_fft_2x2, daemon=True).start()
+
     def on_reproducir_original(self):
         params = self._leer_parametros()
         if not params or not self.senal_original:
@@ -200,6 +317,24 @@ class AplicacionFiltro(ttk.Window):
             return
         fs, _, _, _ = params
         reproducir_audio(self.senal_filtrada, fs)
+
+    # Redefinición al final para dibujar la vista 2x2 en el panel derecho
+    def on_visualizar_2x2(self):
+        params = self._leer_parametros()
+        if not params:
+            return
+        fs, fc1, fc2, _ = params
+        if not self.senal_original:
+            messagebox.showwarning("Advertencia", "Debe grabar una senal antes de visualizar.")
+            return
+        if not self.senal_filtrada:
+            messagebox.showwarning("Advertencia", "Debe filtrar la senal antes de visualizar.")
+            return
+
+        try:
+            mostrar_2x2_en_frame(self.frame_2x2, self.senal_original, self.senal_filtrada, fs, fc1, fc2)
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo mostrar la vista 2x2:\n{e}")
 
 
 if __name__ == "__main__":
