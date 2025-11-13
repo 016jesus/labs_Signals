@@ -4,8 +4,8 @@ from ttkbootstrap.constants import *
 from tkinter import messagebox
 import threading
 
-from diseno_bilineal import disenar_butterworth_pasabanda_orden2_bilineal
-from biquad import FiltroBiquadOrden2
+from diseno_bilineal import disenar_butterworth_pasabanda_bilineal_teorico
+from biquad import FiltroButterworthPasabandaOrden4
 from dft_manual import calcular_dft_real
 from graficos_ttk import trazar_espectros_dobles, mostrar_2x2_matplotlib, mostrar_2x2_en_frame, trazar_2x2_canvas
 from audio_io import grabar_voz, reproducir_audio, guardar_wav, pyaudio
@@ -18,10 +18,9 @@ class AplicacionFiltro(ttk.Window):
         self.geometry("1220x880")
 
         # Estilos base (fuentes y contraste)
-        style = self.style  # ttk.Window expone una propiedad 'style' de solo lectura
+        style = self.style
         style.configure("TLabel", font=("Segoe UI", 10))
         style.configure("TButton", font=("Segoe UI", 10))
-        # Título y subtítulo sin fondo blanco; alto contraste en tema oscuro
         style.configure("Title.TLabel", font=("Segoe UI", 14, "bold"), foreground="#e6edf3")
         style.configure("Subtitle.TLabel", font=("Segoe UI", 10), foreground="#9da7b3")
 
@@ -30,11 +29,13 @@ class AplicacionFiltro(ttk.Window):
         self.frecuencia_corte_baja_hz = ttk.StringVar(value="2000")
         self.frecuencia_corte_alta_hz = ttk.StringVar(value="4000")
         self.duracion_grabacion_s = ttk.StringVar(value="6")
-        self.texto_coeficientes = ttk.StringVar(value="Coeficientes: b0=?, b1=?, b2=?, a1=?, a2=?")
+        self.texto_coeficientes = ttk.StringVar(
+            value="Coeficientes: A0=?, A2=?, A4=?, B0=?, B1=?, B2=?, B3=?, B4=?"
+        )
         self.texto_parametros = ttk.StringVar(value="Parametros: w1=?, w2=?, w0=?, BW=?")
         self.senal_original = []
         self.senal_filtrada = []
-        self.biquad = None
+        self.filtro = None
         self.win_2x2 = None
         self.frame_2x2 = None
         self.tabs = None
@@ -42,7 +43,7 @@ class AplicacionFiltro(ttk.Window):
 
         self._crear_gui()
 
-    # ===================== Helpers seguros para hilos =====================
+    # ===================== Helpers =====================
     def _set_estado_grabacion(self, texto, bootstyle):
         self.after(0, lambda: self.estado_grabacion.config(text=texto, bootstyle=bootstyle))
 
@@ -56,12 +57,11 @@ class AplicacionFiltro(ttk.Window):
                                                esp_o, esp_f,
                                                fs, fc1, fc2))
 
-    # ===================== Construccion GUI =====================
+    # ===================== GUI =====================
     def _crear_gui(self):
         root = ttk.Frame(self, padding=14)
         root.pack(fill="both", expand=True)
 
-        # Header
         header = ttk.Frame(root)
         header.pack(fill="x", pady=(0, 8))
         ttk.Label(header, text="Filtro Butterworth Pasabanda (Orden 2)",
@@ -69,11 +69,9 @@ class AplicacionFiltro(ttk.Window):
         ttk.Label(header, text="Diseno bilineal • Audio DSP",
                   style="Subtitle.TLabel").pack(side="left", padx=10)
 
-        # Contenido principal: panel de control + canvas
         contenido = ttk.Frame(root)
         contenido.pack(fill="both", expand=True)
 
-        # Panel lateral izquierdo
         panel = ttk.Labelframe(contenido, text="Parametros del Filtro", bootstyle="info", padding=12)
         panel.pack(side="left", fill="y", padx=(0, 12))
 
@@ -86,9 +84,9 @@ class AplicacionFiltro(ttk.Window):
 
         ttk.Button(panel, text="Disenar Filtro", bootstyle="success-outline", command=self.on_disenar).pack(fill="x", pady=4)
         ttk.Button(panel, text="Grabar Voz", bootstyle="secondary-outline", command=self.on_grabar).pack(fill="x", pady=4)
-        ttk.Button(panel, text="Filtrar Senal", bootstyle="primary-outline", command=self.on_filtrar).pack(fill="x", pady=4)
+        ttk.Button(panel, text="Filtrar Señal", bootstyle="primary-outline", command=self.on_filtrar).pack(fill="x", pady=4)
         ttk.Button(panel, text="Visualizar Espectros", bootstyle="warning-outline", command=self.on_visualizar_espectros).pack(fill="x", pady=4)
-        ttk.Button(panel, text="Mostrar 2x2 (pestaña)", bootstyle="warning", command=self.on_visualizar_2x2_nuevo).pack(fill="x", pady=6)
+        ttk.Button(panel, text="Analisis Espectral", bootstyle="warning", command=self.on_visualizar_2x2_nuevo).pack(fill="x", pady=6)
 
         ttk.Button(panel, text="Reproducir Original", bootstyle="info", command=self.on_reproducir_original).pack(fill="x", pady=(2, 2))
         ttk.Button(panel, text="Reproducir Filtrada", bootstyle="info", command=self.on_reproducir_filtrada).pack(fill="x", pady=(0, 6))
@@ -99,38 +97,17 @@ class AplicacionFiltro(ttk.Window):
         ttk.Label(panel, textvariable=self.texto_coeficientes, wraplength=260, bootstyle="light").pack(anchor="w", pady=4)
         ttk.Label(panel, textvariable=self.texto_parametros, wraplength=260, bootstyle="light").pack(anchor="w", pady=4)
 
-        # Panel derecho: espectros
-        derecha = ttk.Labelframe(contenido, text="Visualizacion de Espectros", bootstyle="primary", padding=10)
-        derecha.pack(side="left", fill="both", expand=True)
-
-        self.canvas_espectros = tk.Canvas(
-            derecha, bg="#1f2430", highlightthickness=2, highlightbackground="#343b46"
-        )
-        self.canvas_espectros.pack(fill="both", expand=True, padx=6, pady=6)
-
-        # Segunda ventana: Otras gráficas (2x2)
-        otras = ttk.Labelframe(contenido, text="Otras Graficas (2x2)", bootstyle="secondary", padding=10)
-        otras.pack(side="left", fill="both", expand=True)
-        self.frame_2x2 = ttk.Frame(otras)
-        self.frame_2x2.pack(fill="both", expand=True, padx=6, pady=6)
-
-        # Reconstruir como pestañas y ocultar los contenedores laterales
-        try:
-            derecha.pack_forget()
-            otras.pack_forget()
-        except Exception:
-            pass
-
+        # Tabs de visualización
         self.tabs = ttk.Notebook(contenido)
         self.tabs.pack(side="left", fill="both", expand=True)
 
         # Tab 1: Espectros
         tab_espectros = ttk.Frame(self.tabs)
         self.tabs.add(tab_espectros, text="Espectros")
-        derecha2 = ttk.Labelframe(tab_espectros, text="Visualizacion de Espectros", bootstyle="primary", padding=10)
-        derecha2.pack(fill="both", expand=True)
+        lf_espectros = ttk.Labelframe(tab_espectros, text="Visualizacion de Espectros", bootstyle="primary", padding=10)
+        lf_espectros.pack(fill="both", expand=True)
         self.canvas_espectros = tk.Canvas(
-            derecha2, bg="#1f2430", highlightthickness=2, highlightbackground="#343b46"
+            lf_espectros, bg="#1f2430", highlightthickness=2, highlightbackground="#343b46"
         )
         self.canvas_espectros.pack(fill="both", expand=True, padx=6, pady=6)
 
@@ -150,7 +127,7 @@ class AplicacionFiltro(ttk.Window):
         ttk.Entry(f, textvariable=var, width=12, bootstyle="dark").pack(side="left", padx=8)
         return f
 
-    # ===================== Lectura de parametros =====================
+    # ===================== Funciones principales =====================
     def _leer_parametros(self):
         try:
             fs = int(self.frecuencia_muestreo_hz.get())
@@ -165,16 +142,28 @@ class AplicacionFiltro(ttk.Window):
             messagebox.showerror("Error", "Parametros invalidos.")
             return None
 
-    # ===================== Funcionalidades =====================
     def on_disenar(self):
         params = self._leer_parametros()
         if not params:
             return
         fs, fc1, fc2, dur = params
-        b0, b1, b2, a1, a2, w0, BW, w1, w2 = disenar_butterworth_pasabanda_orden2_bilineal(fc1, fc2, fs)
-        self.biquad = FiltroBiquadOrden2(b0, b1, b2, a1, a2)
-        self.texto_coeficientes.set(f"b0={b0:.3e}, b1={b1:.3e}, b2={b2:.3e}, a1={a1:.3e}, a2={a2:.3e}")
-        self.texto_parametros.set(f"w0={w0:.2f}, BW={BW:.2f}, w1={w1:.2f}, w2={w2:.2f}")
+
+        # === NUEVO DISENO TEORICO ===
+        A0, A2, A4, B0, B1, B2, B3, B4, a, b, c, d, e, omega0, BW, T = disenar_butterworth_pasabanda_bilineal_teorico(fc1, fc2, fs)
+
+        # === MAPEO ===
+        w0 = omega0
+        w1 = fc1
+        w2 = fc2
+
+        self.filtro = FiltroButterworthPasabandaOrden4(A0, A2, A4, B0, B1, B2, B3, B4)
+        self.texto_coeficientes.set(
+            f"A0={A0:.12e}, A2={A2:.12e}, A4={A4:.12e}, "
+            f"B0={B0:.12e}, B1={B1:.12e}, B2={B2:.12e}, B3={B3:.12e}, B4={B4:.12e}"
+        )
+        self.texto_parametros.set(
+            f"w0={w0:.12e}, BW={BW:.12e}, w1={w1:.12e}, w2={w2:.12e}"
+        )
 
     def on_grabar(self):
         params = self._leer_parametros()
@@ -196,23 +185,19 @@ class AplicacionFiltro(ttk.Window):
 
     def on_filtrar(self):
         params = self._leer_parametros()
-        if not params or not self.senal_original or not self.biquad:
-            messagebox.showwarning("Advertencia", "Falta senal o filtro disenado.")
+        if not params or not self.senal_original or not self.filtro:
+            messagebox.showwarning("Advertencia", "Falta señal o filtro diseñado.")
             return
-        fs, fc1, fc2, dur = params
-        self.senal_filtrada = self.biquad.filtrar_bloque(self.senal_original)
-        self._set_estado_grabacion("Senal filtrada lista", "success")
+        self.senal_filtrada = self.filtro.filtrar_bloque(self.senal_original)
+        self._set_estado_grabacion("Señal filtrada lista", "success")
 
     def on_visualizar_espectros(self):
         params = self._leer_parametros()
         if not params:
             return
         fs, _, _, _ = params
-        if not self.senal_original:
-            messagebox.showwarning("Advertencia", "Debe grabar una senal antes de visualizar.")
-            return
-        if not self.senal_filtrada:
-            messagebox.showwarning("Advertencia", "Debe filtrar la senal antes de visualizar.")
+        if not self.senal_original or not self.senal_filtrada:
+            messagebox.showwarning("Advertencia", "Debe grabar y filtrar la señal antes de visualizar.")
             return
 
         self._set_estado_grabacion("Calculando espectros...", "secondary")
@@ -221,65 +206,23 @@ class AplicacionFiltro(ttk.Window):
             try:
                 esp_o = calcular_dft_real(self.senal_original, fs)
                 esp_f = calcular_dft_real(self.senal_filtrada, fs)
-                N = min(len(esp_o), len(esp_f))
-                if N == 0:
-                    self._set_estado_grabacion("Espectros vacios", "warning")
-                    return
-                mags_o = [m for _, m in esp_o[:N]]
-                mags_f = [m for _, m in esp_f[:N]]
+                mags_o = [m for _, m in esp_o]
+                mags_f = [m for _, m in esp_f]
                 self._dibujar_espectros_seguro(mags_o, mags_f)
                 self._set_estado_grabacion("Espectros visualizados correctamente", "success")
             except Exception as e:
                 self._set_estado_grabacion("Error al graficar", "danger")
-                self.after(0, lambda: messagebox.showerror("Error", f"Ocurrio un problema al graficar:\n{e}"))
+                self.after(0, lambda: messagebox.showerror("Error", str(e)))
 
         threading.Thread(target=tarea_fft, daemon=True).start()
 
-    def on_visualizar_2x2(self):
-        params = self._leer_parametros()
-        if not params:
-            return
-        fs, fc1, fc2, _ = params
-        if not self.senal_original:
-            messagebox.showwarning("Advertencia", "Debe grabar una senal antes de visualizar.")
-            return
-        if not self.senal_filtrada:
-            messagebox.showwarning("Advertencia", "Debe filtrar la senal antes de visualizar.")
-            return
-
-        # Cerrar ventana previa si existe para reutilizar
-        try:
-            if self.win_2x2 is not None and int(self.win_2x2.winfo_exists()) == 1:
-                self.win_2x2.destroy()
-        except Exception:
-            pass
-
-        # Abrir la ventana con la visualización 2x2 dentro de la misma interfaz
-        try:
-            def _mark_closed():
-                self.win_2x2 = None
-
-            self.win_2x2 = mostrar_2x2_matplotlib(
-                self, self.senal_original, self.senal_filtrada, fs, fc1, fc2, on_close=_mark_closed
-            )
-            # Posicionar como ventana hija de la principal
-            if self.win_2x2 is not None:
-                self.win_2x2.transient(self)
-                self.win_2x2.focus_set()
-        except Exception as e:
-            messagebox.showerror("Error", f"No se pudo mostrar la vista 2x2:\n{e}")
-
-    # Nueva versión que dibuja en la pestaña 2x2 con Canvas
     def on_visualizar_2x2_nuevo(self):
         params = self._leer_parametros()
         if not params:
             return
         fs, fc1, fc2, _ = params
-        if not self.senal_original:
-            messagebox.showwarning("Advertencia", "Debe grabar una senal antes de visualizar.")
-            return
-        if not self.senal_filtrada:
-            messagebox.showwarning("Advertencia", "Debe filtrar la senal antes de visualizar.")
+        if not self.senal_original or not self.senal_filtrada:
+            messagebox.showwarning("Advertencia", "Debe grabar y filtrar la señal antes de visualizar.")
             return
 
         self._set_estado_grabacion("Calculando 2x2...", "secondary")
@@ -288,19 +231,12 @@ class AplicacionFiltro(ttk.Window):
             try:
                 esp_o = calcular_dft_real(self.senal_original, fs)
                 esp_f = calcular_dft_real(self.senal_filtrada, fs)
-                if not esp_o or not esp_f:
-                    self._set_estado_grabacion("Espectros vacios", "warning")
-                    return
                 self._dibujar_2x2_seguro(esp_o, esp_f, fs, fc1, fc2)
                 self._set_estado_grabacion("2x2 listo", "success")
-                try:
-                    if self.tabs is not None:
-                        self.tabs.select(1)
-                except Exception:
-                    pass
+                self.tabs.select(1)
             except Exception as e:
                 self._set_estado_grabacion("Error al graficar 2x2", "danger")
-                self.after(0, lambda: messagebox.showerror("Error", f"Problema al graficar 2x2:\n{e}"))
+                self.after(0, lambda: messagebox.showerror("Error", str(e)))
 
         threading.Thread(target=tarea_fft_2x2, daemon=True).start()
 
@@ -317,24 +253,6 @@ class AplicacionFiltro(ttk.Window):
             return
         fs, _, _, _ = params
         reproducir_audio(self.senal_filtrada, fs)
-
-    # Redefinición al final para dibujar la vista 2x2 en el panel derecho
-    def on_visualizar_2x2(self):
-        params = self._leer_parametros()
-        if not params:
-            return
-        fs, fc1, fc2, _ = params
-        if not self.senal_original:
-            messagebox.showwarning("Advertencia", "Debe grabar una senal antes de visualizar.")
-            return
-        if not self.senal_filtrada:
-            messagebox.showwarning("Advertencia", "Debe filtrar la senal antes de visualizar.")
-            return
-
-        try:
-            mostrar_2x2_en_frame(self.frame_2x2, self.senal_original, self.senal_filtrada, fs, fc1, fc2)
-        except Exception as e:
-            messagebox.showerror("Error", f"No se pudo mostrar la vista 2x2:\n{e}")
 
 
 if __name__ == "__main__":
