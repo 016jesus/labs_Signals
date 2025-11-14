@@ -1,44 +1,71 @@
+
+import os
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
+
 from dct_manual import transformada_dct, transformada_idct
-import os
 
 
 def aplicar_dct_por_bloques(imagen, tamano_bloque=8):
-    """Aplica DCT manual por bloques 8x8."""
     alto, ancho = imagen.shape
     dct_total = np.zeros_like(imagen, dtype=float)
+
     for i in range(0, alto, tamano_bloque):
         for j in range(0, ancho, tamano_bloque):
             bloque = imagen[i:i+tamano_bloque, j:j+tamano_bloque]
-            if bloque.shape == (tamano_bloque, tamano_bloque):
-                dct_fila = np.array([transformada_dct(fila) for fila in bloque])
-                dct_columna = np.array([transformada_dct(col) for col in dct_fila.T]).T
-                dct_total[i:i+tamano_bloque, j:j+tamano_bloque] = dct_columna
+            if bloque.shape != (tamano_bloque, tamano_bloque):
+                continue
+
+            # DCT por filas (1D)
+            dct_filas = []
+            for fila in bloque:
+                coef_fila = transformada_dct(fila.tolist())
+                dct_filas.append(coef_fila)
+            dct_filas = np.array(dct_filas, dtype=float)
+
+            # DCT por columnas (1D)
+            dct_cols = []
+            for col in dct_filas.T:
+                coef_col = transformada_dct(col.tolist())
+                dct_cols.append(coef_col)
+            dct_bloque = np.array(dct_cols, dtype=float).T
+
+            dct_total[i:i+tamano_bloque, j:j+tamano_bloque] = dct_bloque
+
     return dct_total
 
 
 def aplicar_idct_por_bloques(imagen_dct, tamano_bloque=8):
-    """Reconstruye una imagen aplicando IDCT manual por bloques."""
     alto, ancho = imagen_dct.shape
     reconstruida = np.zeros_like(imagen_dct, dtype=float)
+
     for i in range(0, alto, tamano_bloque):
         for j in range(0, ancho, tamano_bloque):
             bloque = imagen_dct[i:i+tamano_bloque, j:j+tamano_bloque]
-            if bloque.shape == (tamano_bloque, tamano_bloque):
-                idct_columna = np.array([transformada_idct(col) for col in bloque.T]).T
-                idct_fila = np.array([transformada_idct(fila) for fila in idct_columna])
-                reconstruida[i:i+tamano_bloque, j:j+tamano_bloque] = idct_fila
+            if bloque.shape != (tamano_bloque, tamano_bloque):
+                continue
+
+            # IDCT por columnas
+            idct_cols = []
+            for col in bloque.T:
+                senal_col = transformada_idct(col.tolist())
+                idct_cols.append(senal_col)
+            idct_cols = np.array(idct_cols, dtype=float).T
+
+            # IDCT por filas
+            idct_filas = []
+            for fila in idct_cols:
+                senal_fila = transformada_idct(fila.tolist())
+                idct_filas.append(senal_fila)
+            idct_bloque = np.array(idct_filas, dtype=float)
+
+            reconstruida[i:i+tamano_bloque, j:j+tamano_bloque] = idct_bloque
+
     return np.clip(reconstruida, 0, 255).astype(np.uint8)
 
 
 def _leer_imagen_grises(ruta_imagen: str):
-    """Lee imagen a escala de grises manejando rutas con acentos/Unicode.
-
-    Intenta primero con imdecode + fromfile (suele ser más robusto en Windows),
-    y si falla, recurre a cv2.imread directamente.
-    """
     if not os.path.exists(ruta_imagen):
         return None
     try:
@@ -53,23 +80,27 @@ def _leer_imagen_grises(ruta_imagen: str):
 
 
 def comprimir_imagen(ruta_imagen, porcentaje_retenido):
-    """Comprime una imagen aplicando DCT manual y reteniendo coeficientes."""
     imagen = _leer_imagen_grises(ruta_imagen)
     if imagen is None:
-        raise FileNotFoundError(f"No se pudo leer la imagen: {ruta_imagen}")
+        raise FileNotFoundError(f'No se pudo leer la imagen: {ruta_imagen}')
+
     tamano_bloque = 8
     alto, ancho = imagen.shape
+
     pad_h = (tamano_bloque - (alto % tamano_bloque)) % tamano_bloque
     pad_w = (tamano_bloque - (ancho % tamano_bloque)) % tamano_bloque
+
     if pad_h or pad_w:
-        imagen_padded = np.pad(imagen, ((0, pad_h), (0, pad_w)), mode="edge")
+        imagen_padded = np.pad(imagen, ((0, pad_h), (0, pad_w)), mode='edge')
     else:
         imagen_padded = imagen
+
     dct_img = aplicar_dct_por_bloques(imagen_padded, tamano_bloque=tamano_bloque)
 
     total = dct_img.size
-    cantidad_retenida = int((porcentaje_retenido / 100) * total)
+    cantidad_retenida = int((porcentaje_retenido / 100.0) * total)
     cantidad_retenida = max(1, min(total, cantidad_retenida))
+
     plano = dct_img.flatten()
     indices = np.argsort(np.abs(plano))[::-1]
     plano_filtrado = np.zeros_like(plano)
@@ -78,19 +109,32 @@ def comprimir_imagen(ruta_imagen, porcentaje_retenido):
 
     reconstruida_padded = aplicar_idct_por_bloques(dct_filtrada, tamano_bloque=tamano_bloque)
     reconstruida = reconstruida_padded[:alto, :ancho]
-    mse = np.mean((imagen.astype(np.float32) - reconstruida.astype(np.float32)) ** 2)
 
-    os.makedirs("resultados", exist_ok=True)
-    cv2.imwrite("resultados/imagen_reconstruida.png", reconstruida)
+    mse = float(np.mean((imagen.astype(np.float32) - reconstruida.astype(np.float32)) ** 2))
 
-    plt.figure(figsize=(10, 5))
-    plt.subplot(1, 2, 1)
+    os.makedirs('resultados', exist_ok=True)
+    cv2.imwrite('resultados/imagen_reconstruida.png', reconstruida)
+
+    # Grafico comparativo y mapa de calor de coeficientes
+    plt.figure(figsize=(12, 4))
+    plt.subplot(1, 3, 1)
     plt.imshow(imagen, cmap='gray')
-    plt.title("Imagen original")
+    plt.title('Original')
+    plt.axis('off')
 
-    plt.subplot(1, 2, 2)
+    plt.subplot(1, 3, 2)
     plt.imshow(reconstruida, cmap='gray')
-    plt.title(f"Imagen reconstruida ({porcentaje_retenido}%)")
+    plt.title(f'Reconstruida ({porcentaje_retenido:.1f}%)')
+    plt.axis('off')
+
+    plt.subplot(1, 3, 3)
+    plt.imshow(np.log1p(np.abs(dct_img)), cmap='inferno')
+    plt.title('Mapa |DCT| (log)')
+    plt.axis('off')
+
+    plt.suptitle(f'Compresión DCT manual - MSE={mse:.4f}', fontsize=10)
+    plt.tight_layout()
     plt.show()
 
-    print(f"Error cuadrático medio: {mse:.6f}")
+    print(f'Error cuadrático medio (MSE): {mse:.6f}')
+    return reconstruida, mse

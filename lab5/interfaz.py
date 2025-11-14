@@ -1,11 +1,12 @@
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+
 import tkinter as tk
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 from tkinter import filedialog, messagebox
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import matplotlib.pyplot as plt
-import numpy as np
-import os
 
 from dct_manual import transformada_dct, transformada_idct
 from procesar_imagen import (
@@ -43,62 +44,170 @@ def _play_audio(wav, fs):
 
 class App(ttk.Window):
     def __init__(self):
-        super().__init__(title="Laboratorio 3 - DCT Manual", themename="cosmo", size=(1100, 750))
+        super().__init__(title="Laboratorio 3 - DCT Manual", themename="cosmo", size=(1400, 850))
         self.place_window_center()
 
         self.modo = tk.StringVar(value="imagen")
         self.ruta_archivo = tk.StringVar(value="")
         self.porcentajes = tk.StringVar(value="5,10,20,50")
+
         self.fs_audio = None
         self.audio_original = None
         self.audio_rec = {}
         self.audio_play_obj = None
 
+        self.info_var = tk.StringVar(value="Listo para procesar.")
         self._build_ui()
 
+    # =====================================================================
+    # ZOOM (clic izquierdo)
+    # =====================================================================
+    def _mostrar_zoom(self, titulo, imagen):
+        zoom = tk.Toplevel(self)
+        zoom.title(titulo)
+        zoom.geometry("900x700")
+
+        fig_zoom = plt.Figure(figsize=(8, 6), dpi=100)
+        ax = fig_zoom.add_subplot(1, 1, 1)
+        ax.imshow(imagen, cmap="gray", aspect="auto")
+        ax.axis("off")
+        ax.set_title(titulo)
+
+        canvas_zoom = FigureCanvasTkAgg(fig_zoom, master=zoom)
+        canvas_zoom.get_tk_widget().pack(fill="both", expand=True)
+        canvas_zoom.draw()
+
+    # =====================================================================
+    # COMPARACIÓN ORIGINAL VS RECONSTRUIDA (clic derecho)
+    # =====================================================================
+    def _mostrar_comparacion(self, original, reconstruida, porcentaje, mse):
+        win = tk.Toplevel(self)
+        win.title(f"Comparación {porcentaje}%  |  MSE={mse:.4f}")
+        win.geometry("1300x700")
+
+        fig_cmp = plt.Figure(figsize=(12, 6), dpi=100)
+
+        # Original
+        ax1 = fig_cmp.add_subplot(1, 2, 1)
+        ax1.imshow(original, cmap="gray", aspect="auto")
+        ax1.axis("off")
+        ax1.set_title("Original")
+
+        # Reconstruida
+        ax2 = fig_cmp.add_subplot(1, 2, 2)
+        ax2.imshow(reconstruida, cmap="gray", aspect="auto")
+        ax2.axis("off")
+        ax2.set_title(f"Reconstruida {porcentaje}%\nMSE={mse:.4f}")
+
+        canvas_cmp = FigureCanvasTkAgg(fig_cmp, master=win)
+        canvas_cmp.get_tk_widget().pack(fill="both", expand=True)
+        canvas_cmp.draw()
+
+    # =====================================================================
+
     def _build_ui(self):
-        header = ttk.Label(self, text=(
-            "LABORATORIO 3 - DCT MANUAL\n"
-            "Compresion/Descompresion por DCT (1D/2D)"
-        ), font=("Segoe UI", 16, "bold"), anchor="center")
+        style = self.style
+        style.configure("Title.TLabel", font=("Segoe UI", 18, "bold"))
+        style.configure("SubTitle.TLabel", font=("Segoe UI", 11, "italic"))
+
+        header = ttk.Label(
+            self,
+            text="LABORATORIO 3 - TRANSFORMADA DISCRETA DEL COSENO (DCT)\nCompresión / Descompresión manual (1D / 2D)",
+            style="Title.TLabel",
+            anchor="center",
+            justify="center",
+        )
         header.pack(pady=10)
 
-        controls = ttk.Frame(self)
-        controls.pack(fill="x", padx=10)
+        main_frame = ttk.Frame(self)
+        main_frame.pack(fill="both", expand=True, padx=10, pady=5)
 
-        ttk.Label(controls, text="Modo:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
-        ttk.Radiobutton(controls, text="Imagen", variable=self.modo, value="imagen").grid(row=0, column=1, padx=5)
-        ttk.Radiobutton(controls, text="Audio", variable=self.modo, value="audio").grid(row=0, column=2, padx=5)
+        left_frame = ttk.Labelframe(main_frame, text="Configuración", padding=10)
+        left_frame.pack(side="left", fill="y")
 
-        ttk.Button(controls, text="Seleccionar archivo", bootstyle=PRIMARY, command=self._seleccionar_archivo).grid(row=0, column=3, padx=10)
-        ttk.Label(controls, textvariable=self.ruta_archivo, width=70, anchor="w").grid(row=0, column=4, padx=5, sticky="w")
+        right_frame = ttk.Frame(main_frame)
+        right_frame.pack(side="right", fill="both", expand=True)
 
-        ttk.Label(controls, text="Porcentajes (%):").grid(row=1, column=0, padx=5, pady=5, sticky="w")
-        ttk.Entry(controls, textvariable=self.porcentajes, width=30).grid(row=1, column=1, columnspan=2, padx=5, sticky="w")
-        ttk.Button(controls, text="Procesar", bootstyle=SUCCESS, command=self._procesar).grid(row=1, column=3, padx=10)
+        # Selección modo
+        ttk.Label(left_frame, text="Modo:").grid(row=0, column=0, sticky="w")
+        ttk.Radiobutton(left_frame, text="Imagen", variable=self.modo, value="imagen",
+                        command=self._on_modo_cambiado).grid(row=0, column=1, sticky="w", padx=5)
+        ttk.Radiobutton(left_frame, text="Audio", variable=self.modo, value="audio",
+                        command=self._on_modo_cambiado).grid(row=0, column=2, sticky="w", padx=5)
 
-        self.fig = plt.Figure(figsize=(9, 5.5), dpi=100)
-        self.canvas = FigureCanvasTkAgg(self.fig, master=self)
-        self.canvas.get_tk_widget().pack(fill="both", expand=True, padx=10, pady=10)
+        # Selección archivo
+        ttk.Button(left_frame, text="Seleccionar archivo", bootstyle=PRIMARY,
+                   command=self._seleccionar_archivo).grid(row=1, column=0, columnspan=3, pady=5, sticky="ew")
 
-        self.audio_controls = ttk.Frame(self)
-        self.audio_controls.pack(fill="x", padx=10, pady=5)
-        self._refresh_audio_controls()
+        ttk.Label(left_frame, text="Archivo seleccionado:").grid(row=2, column=0, columnspan=3, sticky="w")
+        ttk.Label(left_frame, textvariable=self.ruta_archivo, width=40, wraplength=250).grid(
+            row=3, column=0, columnspan=3, sticky="w"
+        )
 
-        ttk.Label(self, text="Desarrollado por: Diego Alejandro Machado Tovar", font=("Segoe UI", 9, "italic")).pack(side="bottom", pady=5)
+        ttk.Separator(left_frame, orient="horizontal").grid(row=4, column=0, columnspan=3, sticky="ew", pady=5)
+
+        # Porcentajes
+        ttk.Label(left_frame, text="Retener coeficientes (%):").grid(
+            row=5, column=0, columnspan=3, sticky="w"
+        )
+        ttk.Entry(left_frame, textvariable=self.porcentajes, width=25).grid(
+            row=6, column=0, columnspan=3, sticky="ew", pady=2
+        )
+        ttk.Label(left_frame, text="Ejemplo: 5,10,20,50").grid(row=7, column=0, columnspan=3, sticky="w")
+
+        ttk.Button(left_frame, text="Procesar", bootstyle=SUCCESS, command=self._procesar).grid(
+            row=8, column=0, columnspan=3, pady=8, sticky="ew"
+        )
+
+        ttk.Separator(left_frame, orient="horizontal").grid(row=9, column=0, columnspan=3, sticky="ew", pady=5)
+
+        # Controles de audio
+        ttk.Label(left_frame, text="Controles de audio:", style="SubTitle.TLabel").grid(
+            row=10, column=0, columnspan=3, sticky="w", pady=(5, 2)
+        )
+        self.audio_controls = ttk.Frame(left_frame)
+        self.audio_controls.grid(row=11, column=0, columnspan=3, sticky="ew")
+
+        ttk.Separator(left_frame, orient="horizontal").grid(row=12, column=0, columnspan=3, sticky="ew", pady=5)
+
+        # Información
+        ttk.Label(left_frame, text="Información:", style="SubTitle.TLabel").grid(
+            row=13, column=0, columnspan=3, sticky="w"
+        )
+        ttk.Label(left_frame, textvariable=self.info_var, wraplength=260, justify="left").grid(
+            row=14, column=0, columnspan=3, sticky="w", pady=(2, 0)
+        )
+
+        # Figura
+        self.fig = plt.Figure(figsize=(20, 10), dpi=100)
+        self.canvas = FigureCanvasTkAgg(self.fig, master=right_frame)
+        self.canvas.get_tk_widget().pack(fill="both", expand=True)
+
+        # Footer
+        ttk.Label(self, text="Desarrollado por: Diego Alejandro Machado Tovar",
+                  style="SubTitle.TLabel").pack(side="bottom", pady=5)
+
+        self._refresh_audio_controls(clear=True)
+
+    def _on_modo_cambiado(self):
+        self._refresh_audio_controls(clear=(self.modo.get() != "audio"))
 
     def _seleccionar_archivo(self):
         if self.modo.get() == "imagen":
-            ruta = filedialog.askopenfilename(filetypes=[("Imagenes", ("*.png", "*.jpg", "*.jpeg", "*.bmp", "*.tif", "*.tiff"))])
+            ruta = filedialog.askopenfilename(
+                filetypes=[("Imágenes", ("*.png", "*.jpg", "*.jpeg", "*.bmp", "*.tif", "*.tiff"))]
+            )
         else:
-            ruta = filedialog.askopenfilename(filetypes=[("WAV", "*.wav")])
+            ruta = filedialog.askopenfilename(filetypes=[("Archivos WAV", "*.wav")])
+
         if ruta:
             self.ruta_archivo.set(ruta)
+            self.info_var.set("Archivo seleccionado.")
 
     def _procesar(self):
         porcentajes = _parse_porcentajes(self.porcentajes.get())
-        if len(porcentajes) < 3:
-            messagebox.showwarning("Porcentajes", "Ingrese al menos 3 porcentajes validos, separados por coma.")
+        if not porcentajes:
+            messagebox.showwarning("Porcentajes", "Ingrese porcentajes válidos.")
             return
         if not self.ruta_archivo.get():
             messagebox.showwarning("Archivo", "Seleccione un archivo primero.")
@@ -109,89 +218,165 @@ class App(ttk.Window):
             self._refresh_audio_controls(clear=True)
         else:
             self._procesar_audio(porcentajes)
-            self._refresh_audio_controls()
+            self._refresh_audio_controls(clear=False)
 
+    # =====================================================================
+    # ⭐ PROCESAMIENTO DE IMAGEN CON GRILLA DINÁMICA + ZOOM + COMPARACIÓN
+    # =====================================================================
     def _procesar_imagen(self, porcentajes):
         try:
-            img = _leer_imagen_grises(self.ruta_archivo.get())
+            ruta = self.ruta_archivo.get()
+            img = _leer_imagen_grises(ruta)
             if img is None:
                 raise FileNotFoundError("No se pudo leer la imagen")
+
             h, w = img.shape
             b = 8
+
             pad_h = (b - (h % b)) % b
             pad_w = (b - (w % b)) % b
             img_pad = np.pad(img, ((0, pad_h), (0, pad_w)), mode="edge") if (pad_h or pad_w) else img
+
             dct_img = aplicar_dct_por_bloques(img_pad, tamano_bloque=b)
 
-            ncols = 1 + len(porcentajes)
-            self.fig.clear()
-            for idx in range(ncols):
-                ax = self.fig.add_subplot(1, ncols, idx + 1)
-                ax.axis('off')
-                if idx == 0:
-                    ax.imshow(img, cmap='gray')
-                    ax.set_title("Original")
-                else:
-                    p = porcentajes[idx - 1]
-                    total = dct_img.size
-                    k = max(1, min(total, int((p / 100.0) * total)))
-                    plano = dct_img.flatten()
-                    idxs = np.argsort(np.abs(plano))[::-1]
-                    pf = np.zeros_like(plano)
-                    pf[idxs[:k]] = plano[idxs[:k]]
-                    dct_f = pf.reshape(dct_img.shape)
-                    rec_pad = aplicar_idct_por_bloques(dct_f, tamano_bloque=b)
-                    rec = rec_pad[:h, :w]
-                    ax.imshow(rec, cmap='gray')
-                    ax.set_title(f"Rec {int(p)}%")
-            self.fig.tight_layout()
-            self.canvas.draw()
-        except Exception as e:
-            messagebox.showerror("Imagen", f"Error procesando imagen:\n{e}")
+            # ---------------------------------------------------------------
+            # ⭐ GRILLA DINÁMICA
+            # ---------------------------------------------------------------
+            total_imgs = 2 + len(porcentajes)
+            ncols = 3
+            nrows = int(np.ceil(total_imgs / ncols))
 
+            self.fig.clear()
+            idx = 1
+            info = []
+
+            # -------------------------
+            # ORIGINAL
+            # -------------------------
+            ax = self.fig.add_subplot(nrows, ncols, idx)
+            ax.imshow(img, cmap="gray", aspect="auto")
+            ax.axis("off")
+            ax.set_title("Original")
+            idx += 1
+
+            # -------------------------
+            # MAPA DCT
+            # -------------------------
+            ax = self.fig.add_subplot(nrows, ncols, idx)
+            ax.imshow(np.log1p(np.abs(dct_img)), cmap="inferno", aspect="auto")
+            ax.axis("off")
+            ax.set_title("Mapa |DCT| (log)")
+            idx += 1
+
+            # -------------------------
+            # RECONSTRUCCIONES
+            # -------------------------
+            for p in porcentajes:
+                total = dct_img.size
+                k = max(1, min(total, int((p / 100.0) * total)))
+
+                plano = dct_img.flatten()
+                idxs_sorted = np.argsort(np.abs(plano))[::-1]
+                pf = np.zeros_like(plano)
+                pf[idxs_sorted[:k]] = plano[idxs_sorted[:k]]
+                dct_filtrada = pf.reshape(dct_img.shape)
+
+                rec_pad = aplicar_idct_por_bloques(dct_filtrada, tamano_bloque=b)
+                rec = rec_pad[:h, :w]
+
+                mse = float(np.mean((img.astype(np.float32) - rec.astype(np.float32)) ** 2))
+                info.append(f"{p}% → MSE={mse:.6f}")
+
+                ax = self.fig.add_subplot(nrows, ncols, idx)
+                ax.imshow(rec, cmap="gray", aspect="auto")
+                ax.axis("off")
+                ax.set_title(f"Rec {p}%\nMSE={mse:.3f}")
+
+                # -----------------------------
+                # ⭐ EVENTOS DE CLIC
+                # -----------------------------
+                def on_click(event, p=p, rec_img=rec, orig_img=img, mse_val=mse, ax_ref=ax):
+                    if event.inaxes != ax_ref:
+                        return
+                    if event.button == 1:
+                        self._mostrar_zoom(f"Zoom {p}%", rec_img)
+                    elif event.button == 3:
+                        self._mostrar_comparacion(orig_img, rec_img, p, mse_val)
+
+                self.canvas.mpl_connect("button_press_event", on_click)
+
+                idx += 1
+
+            self.fig.subplots_adjust(wspace=0.25, hspace=0.35)
+            self.canvas.draw()
+
+            self.info_var.set("Procesamiento de imagen:\n" + "\n".join(info))
+
+        except Exception as e:
+            messagebox.showerror("Imagen", str(e))
+
+    # =====================================================================
+    # AUDIO (inalterado salvo interfaz)
+    # =====================================================================
     def _procesar_audio(self, porcentajes):
         try:
             import soundfile as sf
-            senal, fs = sf.read(self.ruta_archivo.get())
-            if hasattr(senal, 'ndim') and senal.ndim > 1:
-                senal = senal.mean(axis=1)
-            maxabs = np.max(np.abs(senal))
-            if maxabs > 0:
-                senal = senal / maxabs
 
-            coef = transformada_dct(senal)
-            self.audio_original = senal
+            ruta = self.ruta_archivo.get()
+            senal, fs = sf.read(ruta)
+
+            if hasattr(senal, "ndim") and senal.ndim > 1:
+                senal = senal.mean(axis=1)
+
+            maxabs = float(np.max(np.abs(senal)))
+            senal_norm = senal / maxabs if maxabs > 0 else senal
+
+            coef = np.array(transformada_dct(senal_norm.tolist()), dtype=float)
+
+            self.audio_original = senal_norm
             self.fs_audio = fs
             self.audio_rec = {}
 
             self.fig.clear()
             ax = self.fig.add_subplot(1, 1, 1)
-            ax.plot(senal, label='Original', color='k', linewidth=1)
+            ax.plot(senal_norm, label="Original", color="k", linewidth=0.8)
 
             total = len(coef)
             idxs = np.argsort(np.abs(coef))[::-1]
             colors = plt.cm.tab10.colors
+            info = []
+
             for i, p in enumerate(porcentajes):
                 k = max(1, min(total, int((p / 100.0) * total)))
                 mask = np.zeros_like(coef)
                 mask[idxs[:k]] = coef[idxs[:k]]
-                rec = transformada_idct(mask)
-                self.audio_rec[int(p)] = rec
-                ax.plot(rec, label=f'Rec {int(p)}% ', color=colors[i % len(colors)], alpha=0.8)
 
-            ax.set_title('Senal de voz (dominio del tiempo)')
-            ax.legend(loc='upper right', fontsize=8)
+                rec = np.array(transformada_idct(mask.tolist()), dtype=float)
+                self.audio_rec[int(p)] = rec
+
+                mse = float(np.mean((senal_norm - rec) ** 2))
+                info.append(f"{p}% → MSE={mse:.6f}")
+
+                ax.plot(rec, label=f"Rec {p}%", color=colors[i % len(colors)], alpha=0.8, linewidth=0.8)
+
+            ax.set_title("Señal de voz")
+            ax.legend(loc="upper right", fontsize=8)
             self.fig.tight_layout()
             self.canvas.draw()
+
+            self.info_var.set("Procesamiento de audio:\n" + "\n".join(info))
+
         except Exception as e:
-            messagebox.showerror("Audio", f"Error procesando audio:\n{e}")
+            messagebox.showerror("Audio", str(e))
+
+    # =====================================================================
 
     def _refresh_audio_controls(self, clear=False):
         for w in self.audio_controls.winfo_children():
             w.destroy()
 
-        if clear or self.modo.get() != 'audio':
-            ttk.Label(self.audio_controls, text="").pack()
+        if clear or self.modo.get() != "audio":
+            ttk.Label(self.audio_controls, text="(Modo audio)").pack(anchor="w")
             return
 
         def stop():
@@ -206,7 +391,8 @@ class App(ttk.Window):
             if self.audio_original is not None and self.fs_audio:
                 self.audio_play_obj = _play_audio(self.audio_original, self.fs_audio)
 
-        ttk.Button(self.audio_controls, text='Reproducir Original', bootstyle=INFO, command=play_orig).pack(side='left', padx=5)
+        ttk.Button(self.audio_controls, text="Reproducir original", bootstyle=INFO,
+                   command=play_orig).pack(fill="x", pady=2)
 
         for p in sorted(self.audio_rec.keys()):
             def make_cb(pp=p):
@@ -214,10 +400,11 @@ class App(ttk.Window):
                     stop()
                     self.audio_play_obj = _play_audio(self.audio_rec[pp], self.fs_audio)
                 return _cb
-            ttk.Button(self.audio_controls, text=f'Reproducir {p}%', bootstyle=SUCCESS, command=make_cb()).pack(side='left', padx=5)
+
+            ttk.Button(self.audio_controls, text=f"Reproducir {p}%", bootstyle=SUCCESS,
+                       command=make_cb()).pack(fill="x", pady=2)
 
 
 def iniciar_interfaz():
     app = App()
     app.mainloop()
-
