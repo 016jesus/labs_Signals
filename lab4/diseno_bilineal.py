@@ -1,28 +1,13 @@
-"""
-Módulo: diseno_bilineal.py
--------------------------------------
-Diseño matemático completo del filtro Butterworth pasabanda de orden 2
-usando la Transformación Bilineal paso a paso, según el desarrollo teórico
-del documento del curso.
-
-Incluye el cálculo de las constantes analógicas a,b,c,d,e y los coeficientes
-discretos A0,A2,A4,B0,B1,B2,B3,B4 conforme a la ecuación en diferencias:
-    y[n] = (1/B0)*(A0*x[n] - A2*x[n-2] + A4*x[n-4]
-                   - B1*y[n-1] - B2*y[n-2] - B3*y[n-3] - B4*y[n-4])
-"""
-
 from math import pi, tan, sqrt
 
 
 # ========================= 1. Funciones base =========================
 
 def calcular_warp(fc_hz, fs_hz):
-    """Frecuencia analógica prewarp para compensar distorsión de Tustin."""
     return 2.0 * fs_hz * tan(pi * (fc_hz / fs_hz))
 
 
 def obtener_parametros_analogicos(fc1_hz, fc2_hz, fs_hz):
-    """Calcula ω0 (rad/s) y ancho de banda BW analógico (rad/s)."""
     Omega1 = calcular_warp(fc1_hz, fs_hz)
     Omega2 = calcular_warp(fc2_hz, fs_hz)
     omega0 = sqrt(Omega1 * Omega2)     # Frecuencia central analógica
@@ -33,14 +18,6 @@ def obtener_parametros_analogicos(fc1_hz, fc2_hz, fs_hz):
 # ========================= 2. Constantes a,b,c,d,e =========================
 
 def constantes_ABCDE(omega0, BW):
-    """
-    Cálculo de las constantes analógicas según el modelo teórico del filtro:
-        a = BW^2
-        b = sqrt(2)*BW
-        c = 2*omega0^2 + BW^2
-        d = sqrt(2)*BW*omega0^2
-        e = omega0^4
-    """
     a = BW**2
     b = sqrt(2) * BW
     c = 2 * (omega0**2) + BW**2
@@ -52,10 +29,6 @@ def constantes_ABCDE(omega0, BW):
 # ========================= 3. Coeficientes discretos =========================
 
 def coeficientes_diferencias(a, b, c, d, e, fs_hz):
-    """
-    Genera los coeficientes A0,A2,A4,B0,B1,B2,B3,B4 de la ecuación discreta
-    luego de aplicar la transformada bilineal con T = 1/fs.
-    """
     T = 1.0 / fs_hz
 
     A0 = 4 * a * (T**2)
@@ -74,14 +47,6 @@ def coeficientes_diferencias(a, b, c, d, e, fs_hz):
 # ========================= 4. Función general de diseño =========================
 
 def disenar_butterworth_pasabanda_bilineal_teorico(fc1_hz, fc2_hz, fs_hz):
-    """
-    Diseña un filtro Butterworth pasabanda de 2° orden con bilineal completa
-    según las ecuaciones del desarrollo teórico del laboratorio.
-
-    Retorna:
-      A0,A2,A4,B0,B1,B2,B3,B4 : coeficientes de la ecuación en diferencias
-      a,b,c,d,e,omega0,BW,T   : parámetros analógicos y de discretización
-    """
     omega0, BW = obtener_parametros_analogicos(fc1_hz, fc2_hz, fs_hz)
     a, b, c, d, e = constantes_ABCDE(omega0, BW)
     A0, A2, A4, B0, B1, B2, B3, B4 = coeficientes_diferencias(a, b, c, d, e, fs_hz)

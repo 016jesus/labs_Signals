@@ -1,20 +1,9 @@
-"""
-Modulo: graficos_ttk.py
--------------------------------------
-Funciones de trazado para los espectros en la interfaz.
-"""
 
 import tkinter as tk
 from math import log10
 
 
 def trazar_espectros_dobles(canvas, espectro_original, espectro_filtrada):
-    """
-    Dibuja dos subgraficas en un canvas:
-      - Superior: magnitud del espectro original (dB)
-      - Inferior: magnitud del espectro filtrado (dB)
-    Ambas se escalan automaticamente al tamano del canvas.
-    """
 
     # --- Limpieza y validaciones ---
     canvas.delete("all")
@@ -123,18 +112,6 @@ def trazar_espectros_dobles(canvas, espectro_original, espectro_filtrada):
 
 
 def trazar_2x2_canvas(canvas, senal_original, senal_filtrada, espectro_original, espectro_filtrada, fs, fc1, fc2):
-    """
-    Dibuja 4 subgráficas en un único Canvas (2x2):
-      - [0,0] Señal Original (Tiempo)
-      - [0,1] Espectro Original (lineal)
-      - [1,0] Señal Filtrada (Tiempo)
-      - [1,1] Espectro Filtrado (lineal) con sombreado de bandas entre [fc1, fc2]
-
-    Notas:
-      - Las entradas de espectro deben ser listas de tuplas (f, |X|).
-      - Se aplica reduccion de puntos para rendimiento en Canvas.
-    """
-
     canvas.delete("all")
 
     if not senal_original or not senal_filtrada or not espectro_original or not espectro_filtrada:
@@ -302,15 +279,6 @@ def trazar_2x2_canvas(canvas, senal_original, senal_filtrada, espectro_original,
 
 
 def mostrar_2x2_matplotlib(parent, senal_original, senal_filtrada, fs, fc1, fc2, on_close=None):
-    """
-    Abre una ventana secundaria con una figura Matplotlib 2x2:
-      [0,0] Señal Original (Tiempo)
-      [0,1] Espectro Original (lineal)
-      [1,0] Señal Filtrada (Tiempo)
-      [1,1] Espectro Filtrado (lineal) con sombreado de bandas
-
-    Los espectros se calculan usando `calcular_dft_real`.
-    """
     # Importar aquí para no cargar Matplotlib si no se usa este modo
     import matplotlib.pyplot as plt
     from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -410,10 +378,6 @@ def mostrar_2x2_matplotlib(parent, senal_original, senal_filtrada, fs, fc1, fc2,
 
 
 def mostrar_2x2_en_frame(frame, senal_original, senal_filtrada, fs, fc1, fc2):
-    """
-    Renderiza la figura 2x2 dentro de un `frame` (widget Tk) existente.
-    Destruye cualquier contenido previo del frame antes de dibujar.
-    """
     import matplotlib.pyplot as plt
     from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
     from dft_manual import calcular_dft_real
