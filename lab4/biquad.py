@@ -12,7 +12,7 @@ class FiltroBiquadOrden2:
         return y
     
     def filtrar_bloque(self, senal):
-        return [self.filtrar_muestra(v) for v in senal]
+        return [self.filtrar_muestra(v) for v in senal] 
     
     def clonar_reseteado(self):
         return FiltroBiquadOrden2(self.b0, self.b1, self.b2, self.a1, self.a2)
