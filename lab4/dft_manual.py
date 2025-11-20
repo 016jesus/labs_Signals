@@ -1,19 +1,8 @@
-"""
-Módulo: dfr_manual.py
--------------------------------------
-Cálculo del espectro (DFT real) usando librerías optimizadas (NumPy FFT)
-en lugar del cálculo manual por bucles.
-"""
-
 import numpy as np
 from math import sqrt
 
 
 def calcular_dft_real(senal, frecuencia_muestreo_hz):
-    """
-    Calcula el espectro de magnitud de una señal real usando FFT (NumPy).
-    Retorna una lista de tuplas (frecuencia_hz, magnitud_lineal).
-    """
     if senal is None or len(senal) == 0:
         return []
 
@@ -31,10 +20,6 @@ def calcular_dft_real(senal, frecuencia_muestreo_hz):
 
 
 def respuesta_en_frecuencia_por_impulso(filtro_biquad, frecuencia_muestreo_hz, longitud=2048):
-    """
-    Calcula la respuesta en frecuencia del filtro aplicando un impulso
-    y obteniendo su FFT real (optimizada).
-    """
     if filtro_biquad is None:
         return []
 

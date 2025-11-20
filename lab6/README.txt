@@ -1,3 +1,4 @@
+# README.txt
 
 Laboratorio 3 - Transformada Discreta del Coseno (DCT) - Proyecto Mejorado
 =======================================================================

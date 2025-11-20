@@ -1,5 +1,4 @@
-class FiltroBiquadOrden2:
-
+class FiltroBiquadOrden4:
     def __init__(self, coeficiente_b0, coeficiente_b1, coeficiente_b2, coeficiente_a1, coeficiente_a2):
         self.b0 = float(coeficiente_b0); self.b1 = float(coeficiente_b1); self.b2 = float(coeficiente_b2)
         self.a1 = float(coeficiente_a1); self.a2 = float(coeficiente_a2)
@@ -15,15 +14,10 @@ class FiltroBiquadOrden2:
         return [self.filtrar_muestra(v) for v in senal] 
     
     def clonar_reseteado(self):
-        return FiltroBiquadOrden2(self.b0, self.b1, self.b2, self.a1, self.a2)
+        return FiltroBiquadOrden4(self.b0, self.b1, self.b2, self.a1, self.a2)
 
 
 class FiltroButterworthPasabandaOrden4:
-    """
-    Implementa la ecuacion discreta del filtro Butterworth pasabanda derivada en el laboratorio,
-    que incluye terminos x[n], x[n-2], x[n-4] y la realimentacion de hasta y[n-4].
-    """
-
     def __init__(self, A0, A2, A4, B0, B1, B2, B3, B4):
         self.A0 = float(A0); self.A2 = float(A2); self.A4 = float(A4)
         self.B0 = float(B0); self.B1 = float(B1); self.B2 = float(B2)

@@ -1,3 +1,4 @@
+# procesar_imagen.py
 
 import os
 import numpy as np

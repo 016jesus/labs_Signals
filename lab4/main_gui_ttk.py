@@ -7,7 +7,7 @@ import threading
 from diseno_bilineal import disenar_butterworth_pasabanda_bilineal_teorico
 from biquad import FiltroButterworthPasabandaOrden4
 from dft_manual import calcular_dft_real
-from graficos_ttk import trazar_espectros_dobles, mostrar_2x2_matplotlib, mostrar_2x2_en_frame, trazar_2x2_canvas
+from graficos_ttk import mostrar_espectros_en_frame, mostrar_2x2_en_frame
 from audio_io import grabar_voz, reproducir_audio, guardar_wav, pyaudio
 
 
@@ -37,6 +37,7 @@ class AplicacionFiltro(ttk.Window):
         self.senal_filtrada = []
         self.filtro = None
         self.win_2x2 = None
+        self.frame_espectros = None
         self.frame_2x2 = None
         self.tabs = None
         self.canvas_2x2 = None
@@ -47,15 +48,21 @@ class AplicacionFiltro(ttk.Window):
     def _set_estado_grabacion(self, texto, bootstyle):
         self.after(0, lambda: self.estado_grabacion.config(text=texto, bootstyle=bootstyle))
 
-    def _dibujar_espectros_seguro(self, magnitudes_o, magnitudes_f):
-        self.after(0, lambda: trazar_espectros_dobles(self.canvas_espectros, magnitudes_o, magnitudes_f))
+    def _dibujar_espectros_seguro(self, espectro_o, espectro_f):
+        self.after(0, lambda: mostrar_espectros_en_frame(self.frame_espectros, espectro_o, espectro_f))
 
-    def _dibujar_2x2_seguro(self, esp_o, esp_f, fs, fc1, fc2):
-        self.after(0, lambda: trazar_2x2_canvas(self.canvas_2x2,
-                                               self.senal_original,
-                                               self.senal_filtrada,
-                                               esp_o, esp_f,
-                                               fs, fc1, fc2))
+    def _dibujar_2x2_seguro(self, fs, fc1, fc2):
+        self.after(
+            0,
+            lambda: mostrar_2x2_en_frame(
+                self.frame_2x2,
+                self.senal_original,
+                self.senal_filtrada,
+                fs,
+                fc1,
+                fc2,
+            ),
+        )
 
     # ===================== GUI =====================
     def _crear_gui(self):
@@ -106,20 +113,16 @@ class AplicacionFiltro(ttk.Window):
         self.tabs.add(tab_espectros, text="Espectros")
         lf_espectros = ttk.Labelframe(tab_espectros, text="Visualizacion de Espectros", bootstyle="primary", padding=10)
         lf_espectros.pack(fill="both", expand=True)
-        self.canvas_espectros = tk.Canvas(
-            lf_espectros, bg="#1f2430", highlightthickness=2, highlightbackground="#343b46"
-        )
-        self.canvas_espectros.pack(fill="both", expand=True, padx=6, pady=6)
+        self.frame_espectros = ttk.Frame(lf_espectros)
+        self.frame_espectros.pack(fill="both", expand=True, padx=6, pady=6)
 
         # Tab 2: 2x2
         tab_2x2 = ttk.Frame(self.tabs)
         self.tabs.add(tab_2x2, text="Analisis espectral")
         lf_2x2 = ttk.Labelframe(tab_2x2, text="Otras Graficas (2x2)", bootstyle="secondary", padding=10)
         lf_2x2.pack(fill="both", expand=True)
-        self.canvas_2x2 = tk.Canvas(
-            lf_2x2, bg="#1f2430", highlightthickness=2, highlightbackground="#343b46"
-        )
-        self.canvas_2x2.pack(fill="both", expand=True, padx=6, pady=6)
+        self.frame_2x2 = ttk.Frame(lf_2x2)
+        self.frame_2x2.pack(fill="both", expand=True, padx=6, pady=6)
 
     def _fila(self, parent, texto, var):
         f = ttk.Frame(parent)
@@ -206,9 +209,7 @@ class AplicacionFiltro(ttk.Window):
             try:
                 esp_o = calcular_dft_real(self.senal_original, fs)
                 esp_f = calcular_dft_real(self.senal_filtrada, fs)
-                mags_o = [m for _, m in esp_o]
-                mags_f = [m for _, m in esp_f]
-                self._dibujar_espectros_seguro(mags_o, mags_f)
+                self._dibujar_espectros_seguro(esp_o, esp_f)
                 self._set_estado_grabacion("Espectros visualizados correctamente", "success")
             except Exception as e:
                 self._set_estado_grabacion("Error al graficar", "danger")
@@ -229,9 +230,7 @@ class AplicacionFiltro(ttk.Window):
 
         def tarea_fft_2x2():
             try:
-                esp_o = calcular_dft_real(self.senal_original, fs)
-                esp_f = calcular_dft_real(self.senal_filtrada, fs)
-                self._dibujar_2x2_seguro(esp_o, esp_f, fs, fc1, fc2)
+                self._dibujar_2x2_seguro(fs, fc1, fc2)
                 self._set_estado_grabacion("2x2 listo", "success")
                 self.tabs.select(1)
             except Exception as e:
