@@ -19,7 +19,7 @@ from audio_utils import ensure_dir, parse_device_index, enumerate_input_devices
 
 # Parámetros de grabación
 FS = 32768
-DURACION = 0.125  # N/fs = 4096/32768 = 0.125 segundos por grabación
+DURACION = 1  # N/fs = 4096/32768 = 0.125 segundos por grabación
 N = 4096
 
 # Configuración visual
@@ -195,9 +195,9 @@ def menu_principal():
     print(f"\n{BOLD}📝 CONFIGURACIÓN DE COMANDOS:{RESET}")
     print(f"   (Presiona ENTER para usar valores por defecto)")
     
-    etiqueta_a = input(f"\n{BOLD}Comando A [{CYAN}hola{RESET}]: {RESET}").strip() or "hola"
-    etiqueta_b = input(f"{BOLD}Comando B [{CYAN}adios{RESET}]: {RESET}").strip() or "adios"
-    etiqueta_c = input(f"{BOLD}Comando C [{CYAN}parar{RESET}]: {RESET}").strip() or "parar"
+    etiqueta_a = input(f"\n{BOLD}Comando A [{CYAN}segmentar{RESET}]: {RESET}").strip() or "segmentar"
+    etiqueta_b = input(f"{BOLD}Comando B [{CYAN}cifrar{RESET}]: {RESET}").strip() or "cifrar"
+    etiqueta_c = input(f"{BOLD}Comando C [{CYAN}comprimir{RESET}]: {RESET}").strip() or "comprimir"
     
     num_str = input(f"\n{BOLD}Grabaciones por comando [{CYAN}100{RESET}]: {RESET}").strip()
     num_grabaciones = int(num_str) if num_str else 100
