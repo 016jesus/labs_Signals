@@ -19,7 +19,7 @@ from audio_utils import ensure_dir, parse_device_index, enumerate_input_devices
 
 # Parámetros de grabación
 FS = 32768
-DURACION = 1  # N/fs = 4096/32768 = 0.125 segundos por grabación
+DURACION = 0.125  # N/fs = 4096/32768 = 0.125 segundos por grabación
 N = 4096
 
 # Configuración visual
@@ -48,9 +48,9 @@ def cuenta_regresiva(segundos=3):
     print(f"\r{RED}   🔴 GRABANDO...{RESET}         ", flush=True)
 
 
-def grabar_una(fs=FS, duracion=DURACION):
+def grabar_una(fs=FS, duracion=DURACION, device=None):
     """Graba una sola toma"""
-    data = sd.rec(int(duracion * fs), samplerate=fs, channels=1, dtype='float32')
+    data = sd.rec(int(duracion * fs), samplerate=fs, channels=1, dtype='float32', device=device)
     sd.wait()
     return data.flatten()
 
@@ -80,14 +80,21 @@ def seleccionar_microfono():
         idx = int(choice) if choice else 0
         if 0 <= idx < len(device_list):
             selected = device_list[idx]
-            print(f"{GREEN}✓ Usando: {selected['name']}{RESET}\n")
-            return idx
+            # Obtener el índice real del dispositivo en la lista completa de sounddevice
+            all_devices = sd.query_devices()
+            real_idx = None
+            for i, d in enumerate(all_devices):
+                if d['name'] == selected['name'] and d.get('max_input_channels', 0) > 0:
+                    real_idx = i
+                    break
+            print(f"{GREEN}✓ Usando: {selected['name']} (device_id={real_idx}){RESET}\n")
+            return real_idx if real_idx is not None else None
         else:
             print(f"{RED}❌ Índice inválido. Usando predeterminado.{RESET}")
-            return 0
+            return None
     except ValueError:
         print(f"{RED}❌ Entrada inválida. Usando predeterminado.{RESET}")
-        return 0
+        return None
 
 
 def grabar_comando_masivo(etiqueta, num_grabaciones, directorio_base="recordings", device=None):
@@ -142,7 +149,7 @@ def grabar_comando_masivo(etiqueta, num_grabaciones, directorio_base="recordings
         cuenta_regresiva(segundos=2)
         
         # GRABAR
-        audio = grabar_una(fs=FS, duracion=DURACION)
+        audio = grabar_una(fs=FS, duracion=DURACION, device=device)
         
         # Guardar
         filename = os.path.join(carpeta, f"{etiqueta}_{i:03d}.wav")
