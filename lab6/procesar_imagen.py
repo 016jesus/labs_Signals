@@ -4,8 +4,7 @@ import os
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
-
-from dct_manual import transformada_dct, transformada_idct
+from scipy.fftpack import dct, idct
 
 
 def aplicar_dct_por_bloques(imagen, tamano_bloque=8):
@@ -18,19 +17,8 @@ def aplicar_dct_por_bloques(imagen, tamano_bloque=8):
             if bloque.shape != (tamano_bloque, tamano_bloque):
                 continue
 
-            # DCT por filas (1D)
-            dct_filas = []
-            for fila in bloque:
-                coef_fila = transformada_dct(fila.tolist())
-                dct_filas.append(coef_fila)
-            dct_filas = np.array(dct_filas, dtype=float)
-
-            # DCT por columnas (1D)
-            dct_cols = []
-            for col in dct_filas.T:
-                coef_col = transformada_dct(col.tolist())
-                dct_cols.append(coef_col)
-            dct_bloque = np.array(dct_cols, dtype=float).T
+            # DCT 2D separable con scipy (filas luego columnas)
+            dct_bloque = dct(dct(bloque.T, norm='ortho').T, norm='ortho')
 
             dct_total[i:i+tamano_bloque, j:j+tamano_bloque] = dct_bloque
 
@@ -47,19 +35,8 @@ def aplicar_idct_por_bloques(imagen_dct, tamano_bloque=8):
             if bloque.shape != (tamano_bloque, tamano_bloque):
                 continue
 
-            # IDCT por columnas
-            idct_cols = []
-            for col in bloque.T:
-                senal_col = transformada_idct(col.tolist())
-                idct_cols.append(senal_col)
-            idct_cols = np.array(idct_cols, dtype=float).T
-
-            # IDCT por filas
-            idct_filas = []
-            for fila in idct_cols:
-                senal_fila = transformada_idct(fila.tolist())
-                idct_filas.append(senal_fila)
-            idct_bloque = np.array(idct_filas, dtype=float)
+            # IDCT 2D separable con scipy (columnas luego filas)
+            idct_bloque = idct(idct(bloque.T, norm='ortho').T, norm='ortho')
 
             reconstruida[i:i+tamano_bloque, j:j+tamano_bloque] = idct_bloque
 
@@ -133,7 +110,7 @@ def comprimir_imagen(ruta_imagen, porcentaje_retenido):
     plt.title('Mapa |DCT| (log)')
     plt.axis('off')
 
-    plt.suptitle(f'Compresión DCT manual - MSE={mse:.4f}', fontsize=10)
+    plt.suptitle(f'Compresión DCT con SciPy - MSE={mse:.4f}', fontsize=10)
     plt.tight_layout()
     plt.show()
 

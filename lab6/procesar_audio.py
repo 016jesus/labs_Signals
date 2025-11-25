@@ -4,8 +4,7 @@ import os
 import numpy as np
 import soundfile as sf
 import matplotlib.pyplot as plt
-
-from dct_manual import transformada_dct, transformada_idct
+from scipy.fftpack import dct, idct
 
 
 def comprimir_senal_audio(ruta_audio, porcentaje_retenido):
@@ -22,9 +21,8 @@ def comprimir_senal_audio(ruta_audio, porcentaje_retenido):
     else:
         senal_norm = senal
 
-    # Aplicar DCT manual (convertimos a lista)
-    coeficientes = transformada_dct(senal_norm.tolist())
-    coeficientes = np.array(coeficientes, dtype=float)
+    # Aplicar DCT con scipy
+    coeficientes = dct(senal_norm, norm='ortho')
 
     total = len(coeficientes)
     cantidad_retenida = int((porcentaje_retenido / 100.0) * total)
@@ -34,9 +32,8 @@ def comprimir_senal_audio(ruta_audio, porcentaje_retenido):
     coef_filtrados = np.zeros_like(coeficientes)
     coef_filtrados[indices_ordenados[:cantidad_retenida]] = coeficientes[indices_ordenados[:cantidad_retenida]]
 
-    # Reconstrucción con IDCT manual
-    senal_rec = transformada_idct(coef_filtrados.tolist())
-    senal_rec = np.array(senal_rec, dtype=float)
+    # Reconstrucción con IDCT de scipy
+    senal_rec = idct(coef_filtrados, norm='ortho')
 
     # Des-normalizamos
     if max_abs > 0:

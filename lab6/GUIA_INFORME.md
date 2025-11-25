@@ -193,9 +193,9 @@ PSNR = 10·log₁₀(255²/MSE)  [dB]
 Diseñamos el sistema siguiendo una arquitectura modular de 3 capas:
 
 1. CAPA DE PROCESAMIENTO (Backend):
-   • Módulo procesador_imagen_dct.py: DCT 2D por bloques
-   • Módulo procesador_audio_dct.py: DCT 1D para audio
-   • Módulo dct_manual.py: Implementación matemática pura
+   • Módulo procesador_imagen_dct.py: DCT 2D por bloques usando scipy
+   • Módulo procesador_audio_dct.py: DCT 1D para audio usando scipy
+   • Utiliza scipy.fftpack.dct/idct con normalización ortogonal
 
 2. CAPA DE INTERFAZ (Frontend):
    • Módulo interfaz.py: GUI con Tkinter y ttkbootstrap
@@ -233,12 +233,10 @@ Diseñamos el sistema siguiendo una arquitectura modular de 3 capas:
          └──────────┬─────────┘
                     │
            ┌────────▼─────────┐
-           │  dct_manual.py   │
+           │  scipy.fftpack   │
            │                  │
-           │ • _dct_manual    │ ← O(N²)
-           │ • _idct_manual   │
-           │ • _dct_fft       │ ← O(N log N)
-           │ • _idct_fft      │
+           │ • dct()          │ ← Optimizado
+           │ • idct()         │ ← norm='ortho'
            └──────────────────┘
 ```
 
@@ -558,11 +556,11 @@ Para audio de voz:
 • Hasta 10% eliminación: Inteligibilidad > 95%
 • 20% eliminación: Inteligibilidad ≈ 85% (aceptable para telefonía)
 
-3. ARQUITECTURA MODULAR
+3. ARQUITECTURA MODULAR Y LIBRERÍAS OPTIMIZADAS
 La separación en capas (procesamiento, interfaz, integración) 
-facilitó el desarrollo incremental y pruebas unitarias. La 
-implementación manual de DCT permitió comprender profundamente el 
-proceso matemático.
+facilitó el desarrollo incremental y pruebas unitarias. El uso de 
+scipy.fftpack para DCT/IDCT proporcionó implementación optimizada y 
+robusta con normalización ortogonal integrada.
 
 4. VISUALIZACIÓN INTERACTIVA
 Las herramientas de zoom y paneo resultaron esenciales para evaluar 

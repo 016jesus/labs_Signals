@@ -1,12 +1,12 @@
 # README.txt
 
-Laboratorio 3 - Transformada Discreta del Coseno (DCT) - Proyecto Mejorado
+Laboratorio 6 - Transformada Discreta del Coseno (DCT) - Proyecto con SciPy
 =======================================================================
 
 Descripción
 -----------
-Este proyecto implementa la Transformada Discreta del Coseno (DCT) de forma manual,
-siguiendo la definición matemática (sin utilizar librerías de transformada como scipy),
+Este proyecto implementa la Transformada Discreta del Coseno (DCT) utilizando
+la librería optimizada SciPy (scipy.fftpack) con normalización ortogonal,
 y la aplica a:
 
 - Compresión de imágenes en escala de grises mediante DCT 2D por bloques (estilo JPEG).
@@ -32,44 +32,38 @@ Archivos principales
     Punto de entrada del programa. Lanza la interfaz gráfica.
 
 - interfaz.py
-    Contiene la clase App (ventana principal) y la lógica de la interfaz:
+    Contiene la clase AplicacionDCT (ventana principal) y la lógica de la interfaz:
     selección de archivo, modo (imagen/audio), porcentajes, dibujar gráficos y
     manejar los controles de audio.
 
-- dct_manual.py
-    Implementación manual de la DCT-II y su inversa (IDCT) utilizando únicamente
-    la librería estándar de Python (math) y bucles. No se utilizan librerías
-    de transformada ni FFT.
+- procesador_imagen_dct.py y procesar_imagen.py
+    Implementación optimizada de DCT 2D usando scipy.fftpack.dct con normalización
+    ortogonal. Procesa imágenes en bloques de 8x8 píxeles.
 
-- procesar_imagen.py
+- procesador_audio_dct.py y procesar_audio.py
+    Implementación optimizada de DCT 1D usando scipy.fftpack para audio.
     Funciones para:
-      * Leer imágenes a escala de grises.
-      * Aplicar DCT 2D por bloques (8x8).
-      * Aplicar IDCT 2D por bloques.
-      * Comprimir y reconstruir imágenes reteniendo un porcentaje de coeficientes.
-
-- procesar_audio.py
-    Función para comprimir una señal de audio:
-      * Lee un archivo WAV con soundfile.
-      * Convierte a mono y normaliza.
-      * Aplica DCT 1D manual.
-      * Ordena coeficientes por magnitud, retiene un porcentaje y reconstruye.
-      * Calcula MSE y genera un archivo WAV reconstruido.
+      * Leer archivos WAV con soundfile (conversión automática a mono).
+      * Aplicar DCT 1D con normalización ortogonal.
+      * Filtrar coeficientes por magnitud absoluta.
+      * Reconstruir señal mediante IDCT.
+      * Calcular MSE y generar archivo WAV reconstruido.
 
 Dependencias
 ------------
 Debe instalar las siguientes librerías (además de Python 3.x):
 
 - numpy
+- scipy
 - matplotlib
 - opencv-python
 - soundfile
-- simpleaudio
+- sounddevice
 - ttkbootstrap
 
 Se pueden instalar con:
 
-    pip install numpy matplotlib opencv-python soundfile simpleaudio ttkbootstrap
+    pip install numpy scipy matplotlib opencv-python soundfile sounddevice ttkbootstrap
 
 Ejecución
 ---------
@@ -88,9 +82,12 @@ Luego:
 
 Notas
 -----
-- La DCT se implementa de manera matemática, por lo que el tiempo de procesamiento
-  puede ser alto para señales muy largas o imágenes muy grandes. Esto es esperado
-  en un contexto académico donde se debe evidenciar la implementación manual.
+- La DCT utiliza la implementación optimizada de SciPy (scipy.fftpack.dct/idct)
+  con normalización ortogonal, proporcionando procesamiento eficiente incluso
+  para señales largas e imágenes grandes.
 
 - El mapa de calor de coeficientes DCT y los valores de MSE ayudan a justificar
   el análisis de calidad de compresión y la eficiencia del método.
+
+- La interfaz incluye herramientas de zoom y paneo (NavigationToolbar2Tk) para
+  análisis detallado de las reconstrucciones.

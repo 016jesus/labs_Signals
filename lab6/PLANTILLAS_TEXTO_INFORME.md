@@ -208,18 +208,14 @@ principales:
 Capa de Procesamiento (Backend):
 Implementamos tres módulos especializados para el procesamiento matemático:
 
-• procesador_imagen_dct.py: Contiene funciones para DCT 2D por bloques. 
-  Incluye lectura de imágenes en escala de grises, aplicación de DCT 
-  separable por bloques de 8×8, IDCT para reconstrucción, y filtrado 
+• procesador_imagen_dct.py: Contiene funciones para DCT 2D por bloques usando
+  scipy.fftpack. Incluye lectura de imágenes en escala de grises, aplicación 
+  de DCT separable por bloques de 8×8, IDCT para reconstrucción, y filtrado 
   selectivo de coeficientes.
 
-• procesador_audio_dct.py: Maneja señales de audio unidimensionales. 
-  Implementa carga de archivos WAV, conversión a mono, DCT 1D completa, 
-  IDCT y filtrado de coeficientes.
-
-• dct_manual.py: Contiene la implementación matemática pura de DCT-II 
-  e IDCT. Incluye versión directa O(N²) para bloques pequeños y versión 
-  optimizada O(N log N) usando FFT para señales largas.
+• procesador_audio_dct.py: Maneja señales de audio unidimensionales usando
+  scipy.fftpack. Implementa carga de archivos WAV, conversión a mono, DCT 1D 
+  completa, IDCT y filtrado de coeficientes.
 
 Capa de Interfaz (Frontend):
 Desarrollamos interfaz.py que implementa la clase AplicacionDCT usando 
@@ -240,6 +236,10 @@ Optamos por arquitectura modular para facilitar pruebas unitarias y
 permitir extensibilidad futura. La separación entre procesamiento e 
 interfaz permite reutilizar los algoritmos DCT en otras aplicaciones 
 sin modificación.
+
+Elegimos scipy.fftpack para las transformadas DCT/IDCT por su implementación
+optimizada y robusta con normalización ortogonal incorporada. Esto garantiza
+preservación de energía y simplifica los cálculos matemáticos.
 
 Elegimos bloques de 8×8 píxeles para imágenes siguiendo el estándar JPEG, 
 balanceando complejidad computacional O(64²)=O(4096) por bloque contra 

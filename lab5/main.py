@@ -35,10 +35,10 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 # ---------------------------
 # Parámetros por defecto según el enunciado del laboratorio
-FS = 32768         # frecuencia de muestreo por defecto
+FS = 44100         # frecuencia de muestreo estándar (44.1 kHz)
 N = 4096           # tamaño FFT por defecto (potencia de 2)
-K = 3              # subbandas por defecto (según enunciado: dividir en 3 subbandas)
-M = 100            # grabaciones por defecto (según enunciado: mínimo 100 por comando)
+K = 10             # subbandas espectrales (aumentado de 3 a 10 para mejor discriminación)
+M = 50             # grabaciones por defecto (según enunciado: mínimo 100 por comando)
 WINDOW = "hamming" # ventana por defecto
 MODEL_PATH = "lab5_model.json"
 RECORDINGS_DIR = "recordings"  # carpeta para guardar grabaciones
@@ -325,7 +325,7 @@ class Lab5GUI:
         x = x[:N] if len(x) >= N else np.pad(x, (0, N - len(x)))
         
         Es, bands, freqs = compute_subband_energies(x, fs, N, K, window)
-        label, dists = decide_label_by_min_dist(Es, self.model)
+        label, dists = decide_label_by_min_dist(Es, self.model, x_raw=data.flatten())
         
         self._log(f"Predicción: {label}  Distancias: {dists}")
         self._update_plots(x, fs, N, window, freqs, Es, label)
@@ -361,10 +361,11 @@ class Lab5GUI:
                                f'El WAV tiene fs={fsf} y el modelo espera fs={fs}. Remuestrea/normaliza antes.')
             return
         
+        x_orig = x.copy()  # Guardar señal original completa
         x = x[:N] if len(x) >= N else np.pad(x, (0, N - len(x)))
         
         Es, bands, freqs = compute_subband_energies(x, fs, N, K, window)
-        label, dists = decide_label_by_min_dist(Es, self.model)
+        label, dists = decide_label_by_min_dist(Es, self.model, x_raw=x_orig)
         
         self._log(f"Archivo: {os.path.basename(path)}  Predicción: {label}  Distancias: {dists}")
         self._update_plots(x, fs, N, window, freqs, Es, label)
@@ -596,7 +597,7 @@ class Lab5GUI:
             if changed and (now - last_pred_time) > 0.25:  # evitar exceso de triggers
                 try:
                     Es, bands, freqs = compute_subband_energies(buf, fs, N, K, window)
-                    label, dists = decide_label_by_min_dist(Es, self.model)
+                    label, dists = decide_label_by_min_dist(Es, self.model, x_raw=buf)
                     self.pred_label_var.set(label)
                     self.pred_dists_var.set(str({k:f"{v:.2f}" for k,v in dists.items()}))
                     self._log(f"RT: {label}  {dists}")
