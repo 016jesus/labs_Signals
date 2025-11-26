@@ -7,11 +7,11 @@ import os
 import sys
 from model_utils import train_from_folder
 
-# Parámetros del sistema
+# Parámetros del sistema (SEGÚN ENUNCIADO)
 FS = 44100         # Frecuencia de muestreo (Hz)
 N = 4096           # Tamaño de ventana FFT
-K = 10             # Número de subbandas espectrales
-M = 50             # Muestras por comando
+K = 3              # Número de subbandas (ENUNCIADO: dividir en 3 subbandas)
+M = 100            # Muestras por comando (ENUNCIADO: mínimo 100)
 WINDOW = "hamming" # Tipo de ventana
 MODEL_PATH = "lab5_model.json"
 RECORDINGS_DIR = "recordings"
@@ -27,12 +27,17 @@ def main():
     print("="*70)
     print("ENTRENAMIENTO - Banco de Filtros FFT")
     print("="*70)
-    print(f"\nParámetros:")
+    print(f"\nParámetros (SEGÚN ENUNCIADO):")
     print(f"  Frecuencia de muestreo: {FS} Hz")
     print(f"  Tamaño de ventana: {N} muestras ({N/FS*1000:.1f} ms)")
-    print(f"  Número de subbandas: {K}")
-    print(f"  Muestras por comando: {M}")
+    print(f"  Número de subbandas: {K} (ENUNCIADO: 3 subbandas)")
+    print(f"  Muestras por comando: {M} (ENUNCIADO: mínimo 100)")
     print(f"  Tipo de ventana: {WINDOW}")
+    print(f"\n⚠️  IMPORTANTE para error ≤ 5%:")
+    print(f"  • Necesitas mínimo {M} grabaciones por comando")
+    print(f"  • Las grabaciones deben ser de DIFERENTES PERSONAS")
+    print(f"  • Todas deben tener la MISMA DURACIÓN")
+    print(f"  • Se usará energía promedio Y desviación estándar")
     print(f"\nDirectorio de grabaciones: {RECORDINGS_DIR}/")
     print(f"Archivo de salida: {MODEL_PATH}")
     

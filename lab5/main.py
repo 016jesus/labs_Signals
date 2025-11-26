@@ -1,12 +1,40 @@
 """
-GUI Laboratorio 5 - Banco de filtros por FFT para 3 comandos de voz (Tkinter)
+GUI Laboratorio 5 - Reconocimiento de voz por segmentación temporal
 
-Funciones principales del lab:
-- Entrenar: M grabaciones por cada uno de 3 comandos. Normaliza longitud a N y calcula energías por K subbandas.
-- Guardar/cargar modelo (JSON) con medias/std por sub-banda y por comando.
-- Reconocer: desde micrófono (N/fs segundos) o desde un archivo WAV.
-- Visualizar: espectro (magnitud) y barras de energía por sub-banda.
-- Reconocimiento en tiempo real con detección de silencio.
+MÉTODO DE RECONOCIMIENTO:
+==========================
+El sistema reconoce palabras dividiendo el audio en K segmentos temporales
+y calculando la energía de cada pedazo:
+
+1. ANÁLISIS DEL AUDIO:
+   - Se toma el archivo de audio (señal de voz)
+   - Se DIVIDE en K segmentos temporales (pedazos en el tiempo)
+   - Para cada segmento: se calcula FFT y luego la ENERGÍA: E_k = Σ|X(f)|²
+   - Resultado: vector de K energías [E₁, E₂, ..., E_K]
+   
+2. ENTRENAMIENTO:
+   - Para cada palabra/comando, se graban M muestras
+   - Se calcula el vector de energías [E₁, E₂, ..., E_K] de cada muestra
+   - Se promedian para obtener el "patrón de energías" característico de cada palabra
+   
+3. RECONOCIMIENTO:
+   - Se calcula el vector de energías del audio desconocido
+   - Se compara con los patrones de cada palabra (distancia euclidiana)
+   - La palabra con el patrón más similar (menor distancia) es la reconocida
+
+Ejemplo con K=10 segmentos temporales:
+- "segmentar" → energías típicas: [0.12, 0.28, 0.19, 0.17, 0.24, 0.10, 0.15, 0.08, 0.12, 0.05]
+- "cifrar"    → energías típicas: [0.25, 0.15, 0.35, 0.10, 0.15, 0.20, 0.08, 0.12, 0.18, 0.07]
+- "comprimir" → energías típicas: [0.08, 0.40, 0.18, 0.12, 0.22, 0.15, 0.10, 0.09, 0.14, 0.06]
+
+Cada palabra tiene una "firma" de energías característica que permite distinguirlas.
+
+Funciones principales:
+- Entrenar: M grabaciones por cada comando, calcula energías por K segmentos
+- Guardar/cargar modelo (JSON) con patrones de energía por comando
+- Reconocer: desde micrófono o archivo WAV
+- Visualizar: espectro y barras de energía por segmento
+- Reconocimiento en tiempo real con detección de silencio
 """
 
 import os
@@ -34,11 +62,11 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 
 # ---------------------------
-# Parámetros por defecto según el enunciado del laboratorio
+# Parámetros según enunciado del laboratorio
 FS = 44100         # frecuencia de muestreo estándar (44.1 kHz)
 N = 4096           # tamaño FFT por defecto (potencia de 2)
-K = 10             # subbandas espectrales (aumentado de 3 a 10 para mejor discriminación)
-M = 50             # grabaciones por defecto (según enunciado: mínimo 100 por comando)
+K = 3              # subbandas espectrales (SEGÚN ENUNCIADO: dividir en 3 subbandas)
+M = 56            # grabaciones por defecto (SEGÚN ENUNCIADO: mínimo 100 por comando)
 WINDOW = "hamming" # ventana por defecto
 MODEL_PATH = "lab5_model.json"
 RECORDINGS_DIR = "recordings"  # carpeta para guardar grabaciones
@@ -89,6 +117,8 @@ class Lab5GUI:
         self.noise_rms = 0.0
         self.pred_label_var = tk.StringVar(value='-')
         self.pred_dists_var = tk.StringVar(value='-')
+        self.confidence_var = tk.StringVar(value='-')
+        self.validation_var = tk.StringVar(value='-')
         
         # Silencio: parámetros y estado
         self.silence_db_threshold = -50.0  # dBFS por debajo de este valor se considera silencio
@@ -192,6 +222,21 @@ class Lab5GUI:
         
         ttk.Label(recog, text="Distancias:").grid(row=2, column=0, padx=6, pady=(2,0), sticky='e')
         ttk.Label(recog, textvariable=self.pred_dists_var).grid(row=2, column=1, columnspan=3, padx=6, pady=(2,0), sticky='w')
+        
+        # Confianza y validación
+        ttk.Label(recog, text="Confianza:").grid(row=3, column=0, padx=6, pady=(2,0), sticky='e')
+        self.confidence_label = ttk.Label(recog, textvariable=self.confidence_var, font=(None, 9, 'bold'))
+        self.confidence_label.grid(row=3, column=1, columnspan=1, padx=6, pady=(2,0), sticky='w')
+        
+        ttk.Label(recog, text="Info:").grid(row=3, column=2, padx=6, pady=(2,0), sticky='e')
+        self.validation_label = ttk.Label(recog, textvariable=self.validation_var, font=(None, 8))
+        self.validation_label.grid(row=3, column=3, padx=6, pady=(2,0), sticky='w')
+        
+        # Nota informativa
+        note_frame = ttk.Frame(recog)
+        note_frame.grid(row=4, column=0, columnspan=4, padx=6, pady=(6,0), sticky='ew')
+        note_text = "💡 Confianza = separación entre predicciones. ERROR REAL se calcula con validar.py"
+        ttk.Label(note_frame, text=note_text, font=(None, 8), foreground='#6b7280').pack()
 
         # ========== Visualización ==========
         viz = ttk.LabelFrame(main, text="Visualización", padding=10)
@@ -231,6 +276,86 @@ class Lab5GUI:
 
     def _log(self, msg: str):
         self.status_var.set(msg)
+    
+    def _calculate_confidence_and_validation(self, label: str, dists: dict) -> tuple:
+        """
+        Calcula métricas de confianza de la predicción.
+        
+        NOTA IMPORTANTE: 
+        - La confianza aquí es una medida de qué tan separadas están las predicciones
+        - NO es el error real del modelo
+        - El ERROR REAL (< 5%) se calcula con validación usando el script validar.py
+        
+        La confianza indica:
+        - Alta (>90%): La predicción tiene una distancia mucho menor que las demás
+        - Media (70-90%): Hay cierta ambigüedad entre comandos
+        - Baja (<70%): Las distancias son muy similares, predicción dudosa
+        
+        Retorna: (confidence_str, validation_str, confidence_percentage, is_confident, color)
+        """
+        if not dists or len(dists) < 2:
+            return ("-", "-", 0.0, False, "#6b7280")
+        
+        # Obtener distancias ordenadas
+        sorted_dists = sorted(dists.items(), key=lambda x: x[1])
+        winner_label = sorted_dists[0][0]
+        min_dist = sorted_dists[0][1]
+        second_dist = sorted_dists[1][1]
+        
+        # Calcular separación relativa entre mejor y segunda opción
+        # Si min_dist es mucho menor que second_dist → alta confianza
+        if second_dist > 1e-6:
+            separation_ratio = (second_dist - min_dist) / second_dist
+            confidence_score = separation_ratio * 100
+        else:
+            confidence_score = 0.0
+        
+        # Penalizar si la distancia mínima es muy alta (patrón desconocido)
+        # Distancias típicas buenas: 0.01-0.15
+        # Distancias altas (>0.3): posible audio corrupto o comando desconocido
+        if min_dist > 0.4:
+            confidence_score *= 0.3  # Muy mala calidad
+        elif min_dist > 0.3:
+            confidence_score *= 0.5  # Mala calidad
+        elif min_dist > 0.2:
+            confidence_score *= 0.7  # Calidad regular
+        
+        confidence_score = min(100.0, max(0.0, confidence_score))
+        
+        # Clasificar confianza
+        if confidence_score >= 90:
+            confidence_level = "Alta"
+            confidence_color = "#059669"  # Verde
+        elif confidence_score >= 70:
+            confidence_level = "Media"
+            confidence_color = "#d97706"  # Amarillo/naranja
+        else:
+            confidence_level = "Baja"
+            confidence_color = "#dc2626"  # Rojo
+        
+        # Formatear strings
+        confidence_str = f"{confidence_score:.1f}% ({confidence_level})"
+        
+        # Mensaje informativo
+        validation_str = f"Separación: {separation_ratio*100:.0f}% | Dist: {min_dist:.3f}"
+        validation_color = confidence_color
+        
+        is_confident = confidence_score >= 70
+        
+        return (confidence_str, validation_str, confidence_score, is_confident, validation_color)
+    
+    def _update_confidence_display(self, label: str, dists: dict):
+        """Actualiza la visualización de confianza"""
+        confidence_str, info_str, conf_val, is_confident, color = \
+            self._calculate_confidence_and_validation(label, dists)
+        
+        # Actualizar textos
+        self.confidence_var.set(confidence_str)
+        self.validation_var.set(info_str)
+        
+        # Actualizar colores
+        self.confidence_label.config(foreground=color)
+        self.validation_label.config(foreground=color)
 
     def _record_M_per_label(self):
         fs = int(self.fs_var.get())
@@ -328,6 +453,7 @@ class Lab5GUI:
         label, dists = decide_label_by_min_dist(Es, self.model, x_raw=data.flatten())
         
         self._log(f"Predicción: {label}  Distancias: {dists}")
+        self._update_confidence_display(label, dists)
         self._update_plots(x, fs, N, window, freqs, Es, label)
 
     def _pick_file(self):
@@ -368,6 +494,7 @@ class Lab5GUI:
         label, dists = decide_label_by_min_dist(Es, self.model, x_raw=x_orig)
         
         self._log(f"Archivo: {os.path.basename(path)}  Predicción: {label}  Distancias: {dists}")
+        self._update_confidence_display(label, dists)
         self._update_plots(x, fs, N, window, freqs, Es, label)
 
     def _update_plots(self, x: np.ndarray, fs: int, N: int, window: str, 
@@ -405,13 +532,21 @@ class Lab5GUI:
                 pass
             return
         
-        # Espectro en magnitud |X(k)| vs frecuencia angular (rad/s)
+ 
         freqs_hz, mag = compute_spectrum_mag(x, fs, N, window)
-        omega = 2.0 * np.pi * freqs_hz
-        self.ax_spec.plot(omega, mag, color=spec_color, linewidth=1.2)
+        
+       
+        max_freq = 4000 
+        idx_max = np.searchsorted(freqs_hz, max_freq)
+        freqs_plot = freqs_hz[:idx_max]
+        mag_plot = mag[:idx_max]
+        
+        self.ax_spec.plot(freqs_plot, mag_plot, color=spec_color, linewidth=1.2)
         self.ax_spec.set_title('Espectro |X(k)|')
-        self.ax_spec.set_xlabel('Frecuencia (rad/s)')
+        self.ax_spec.set_xlabel('Frecuencia (Hz)')
         self.ax_spec.set_ylabel('Magnitud |X(k)|')
+        self.ax_spec.set_xlim(0, max_freq)
+        self.ax_spec.grid(True, alpha=0.3)
 
         # Barras normalizadas para visual
         E_vis = Es / (Es.sum() + 1e-12)
@@ -517,6 +652,8 @@ class Lab5GUI:
         
         self.pred_label_var.set('-')
         self.pred_dists_var.set('-')
+        self.confidence_var.set('-')
+        self.validation_var.set('-')
         self.recognizer_stop.clear()
         self.prev_rms = 0.0
         self.noise_rms = 0.0
@@ -580,6 +717,8 @@ class Lab5GUI:
                 if (now - self.last_activity_time) > self.silence_min_time:
                     self.pred_label_var.set('silencio')
                     self.pred_dists_var.set('-')
+                    self.confidence_var.set('-')
+                    self.validation_var.set('-')
                     # Mostrar placeholder de silencio
                     self._update_plots(buf, fs, N, window, 
                                      np.linspace(0, fs/2, N//2+1), 
@@ -588,6 +727,8 @@ class Lab5GUI:
                     # Silencio reciente: deja el label en blanco
                     self.pred_label_var.set('')
                     self.pred_dists_var.set('')
+                    self.confidence_var.set('')
+                    self.validation_var.set('')
                 time.sleep(0.05)
                 continue
             else:
@@ -600,6 +741,7 @@ class Lab5GUI:
                     label, dists = decide_label_by_min_dist(Es, self.model, x_raw=buf)
                     self.pred_label_var.set(label)
                     self.pred_dists_var.set(str({k:f"{v:.2f}" for k,v in dists.items()}))
+                    self._update_confidence_display(label, dists)
                     self._log(f"RT: {label}  {dists}")
                     self._update_plots(buf, fs, N, window, freqs, Es, label)
                     last_pred_time = now

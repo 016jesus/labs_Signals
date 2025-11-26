@@ -1,5 +1,21 @@
 """
-Modelo: entrenamiento desde carpetas, carga y decisión por distancia mínima.
+Modelo: Reconocimiento por análisis de segmentos temporales.
+
+MÉTODO DE RECONOCIMIENTO:
+==========================
+1. ENTRENAMIENTO:
+   - Para cada comando (palabra), se graban M muestras
+   - Cada muestra se divide en K segmentos temporales (pedazos en el tiempo)
+   - Se calcula la energía de cada segmento (usando FFT)
+   - Se promedian las energías de todas las muestras del mismo comando
+   - Resultado: cada comando tiene un "patrón de energías" característico
+
+2. RECONOCIMIENTO:
+   - Se divide el audio nuevo en K segmentos temporales
+   - Se calcula la energía de cada segmento
+   - Se compara con los patrones guardados de cada comando
+   - El comando cuyo patrón es más similar (menor distancia) es el reconocido
+
 Adaptado para soportar 3 comandos de voz.
 """
 
@@ -125,23 +141,50 @@ def load_model(path: str) -> dict:
 
 def decide_label_by_min_dist(E: np.ndarray, model: dict, x_raw: np.ndarray = None) -> Tuple[str, dict]:
     """
-    Decide el comando más probable usando distancia euclidiana mínima.
-    Incorpora optimización adaptativa para mejorar robustez.
+    RECONOCIMIENTO: Determina qué comando es mediante comparación de energías.
+    MODIFICADO según enunciado: Usa energía promedio Y desviación estándar.
+    
+    Proceso (según enunciado):
+    1. Se tienen las energías E[K] del audio a reconocer (K=3 segmentos)
+    2. Se compara con el patrón promedio Y desviación de cada comando
+    3. Se calcula distancia considerando la variabilidad (desviación estándar)
+    4. El comando con menor distancia normalizada es el reconocido
+    
+    Fórmula de distancia normalizada (Mahalanobis simplificada):
+    d = √(Σ((E_i - media_i) / (std_i + epsilon))²)
+    
+    Esto penaliza más las diferencias en subbandas con baja variabilidad
+    y es más tolerante en subbandas con alta variabilidad.
     
     Args:
-        E: Vector de energías de subbandas (características FFT)
-        model: Modelo entrenado
+        E: Vector de energías de segmentos del audio a reconocer
+        model: Modelo entrenado con promedios y desviaciones
         x_raw: Señal de audio original (opcional, para refinamiento)
     
     Returns:
         (label_predicho, diccionario_de_distancias)
     """
-    # Calcular distancias euclidianas a medias de cada comando
-    dists = {}
+    # Método 1: Distancia normalizada por desviación estándar (según enunciado)
+    dists_normalized = {}
+    dists_euclidean = {}
+    
     for label, info in model["commands"].items():
         mean = np.array(info["mean"], dtype=float)
-        d = np.linalg.norm(E - mean)
-        dists[label] = float(d)
+        std = np.array(info["std"], dtype=float)
+        
+        # Distancia euclidiana simple (para comparación)
+        d_euclidean = np.linalg.norm(E - mean)
+        dists_euclidean[label] = float(d_euclidean)
+        
+        # Distancia normalizada por desviación (considera variabilidad)
+        # Penaliza más las diferencias en subbandas estables
+        epsilon = 1e-6  # Evitar división por cero
+        normalized_diff = (E - mean) / (std + epsilon)
+        d_normalized = np.linalg.norm(normalized_diff)
+        dists_normalized[label] = float(d_normalized)
+    
+    # Usar distancia normalizada como método principal
+    dists = dists_normalized
     
     # Optimización: si hay señal original, aplicar refinamiento adaptativo
     if x_raw is not None and "_ref_patterns" in model and len(model["_ref_patterns"]) > 0:

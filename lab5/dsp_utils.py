@@ -51,103 +51,89 @@ def _design_sos_for_band(fs: int, f0: float, f1: float, order: int = 6):
 
 def compute_subband_energies(x: np.ndarray, fs: int, N: int, K: int, window: str = "hamming") -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Técnica de banco de filtros por FFT según el documento del laboratorio.
-    *** VERSIÓN MEJORADA CON PREPROCESAMIENTO ROBUSTO ***
-    
-    Proceso:
-    1. Pre-énfasis (realza altas frecuencias - mejor para consonantes)
-    2. Eliminación DC
-    3. Detección actividad voz (VAD) - elimina silencios
-    4. Normalización de energía (independiente del volumen)
-    5. Aplicar ventana a la señal
-    6. Calcular FFT completa
-    7. Dividir espectro en K subbandas por particionamiento directo de bins
-    8. Calcular energía por subbanda: E = (1/N) * Σ|X(k)|²
-    9. Normalización logarítmica y distribución relativa
-    
-    Retorna: (E[K], bands[Kx2] en Hz, freqs rFFT estándar para N)
+    Calcula energías en K segmentos temporales de la señal x.
     """
     
-    # ========== PREPROCESAMIENTO ROBUSTO ==========
-    # 1. Detección de actividad de voz (eliminar silencios)
-    frame_len = int(0.01 * fs)  # 10 ms
-    energy_frames = []
-    for i in range(0, len(x) - frame_len, frame_len // 2):
-        e = np.sqrt(np.mean(x[i:i+frame_len] ** 2))
-        energy_frames.append(e)
+    # ========== PASO 1: PREPROCESAMIENTO DE LA SEÑAL ==========
     
-    if len(energy_frames) > 0:
-        energy_frames = np.array(energy_frames)
-        max_e = np.max(energy_frames)
-        if max_e > 0:
-            threshold = max_e * (10 ** (-30 / 20))  # -30 dB
-            voice_frames = np.where(energy_frames > threshold)[0]
-            if len(voice_frames) > 0:
-                start_idx = voice_frames[0] * (frame_len // 2)
-                end_idx = min((voice_frames[-1] + 2) * (frame_len // 2), len(x))
-                x = x[start_idx:end_idx]
-    
-    # 2. Eliminar componente DC
+    # Eliminar componente DC (offset)
     x = x - np.mean(x)
     
-    # 3. Normalizar energía RMS (independiente del volumen de grabación)
+
     rms_val = np.sqrt(np.mean(x ** 2))
     if rms_val > 1e-8:
-        x = x / rms_val * 0.1  # RMS objetivo = 0.1
+        x = x / rms_val
     
-    # 4. Pre-énfasis: y[n] = x[n] - 0.97*x[n-1] (realza altas frecuencias)
+ 
     x = np.append(x[0], x[1:] - 0.97 * x[:-1])
     
-    # ========== PREPARAR FRAME TAMAÑO N ==========
+    # ========== PASO 2: PREPARAR SEÑAL DE TAMAÑO N ==========
+    
     if len(x) < N:
+        # Rellenar con ceros si es muy corto
         xN = np.pad(x, (0, N - len(x)), mode='constant')
     elif len(x) > N:
-        # Tomar centro (donde suele estar la voz)
+        # Tomar centro donde suele estar la voz
         start = (len(x) - N) // 2
         xN = x[start:start + N]
     else:
         xN = x
     
-    # ========== VENTANA ==========
-    if window is None or window.lower() == "none" or window == "rect":
-        w = np.ones(N)
-    else:
-        w = get_window(window, N, fftbins=True)
-
-    # ========== FFT ==========
-    xw = xN * w
-    X = np.fft.rfft(xw, n=N)  # FFT real: devuelve N//2 + 1 bins
-    freqs = np.fft.rfftfreq(N, d=1.0 / fs)
+    # ========== PASO 3: DIVIDIR EN K SEGMENTOS TEMPORALES ==========
     
-    # ========== PARTICIONAR EN K SUBBANDAS ==========
-    num_bins = len(X)
-    bands = partition_equal_bins(num_bins, K)
-    
-    # ========== CALCULAR ENERGÍAS POR SUBBANDA ==========
+    segment_size = N // K
     Es = np.zeros(K, dtype=float)
-    bands_hz = []
+    bands_hz = []  # Guardaremos rangos de frecuencia de cada segmento
     
-    for i, (start_bin, end_bin) in enumerate(bands):
-        X_band = X[start_bin:end_bin]
-        
-        # Energía: E = (1/N) * Σ|X(k)|²
-        E = np.sum(np.abs(X_band) ** 2) / N
-        Es[i] = float(E)
-        
-        # Rangos de frecuencia en Hz
-        f0 = freqs[start_bin]
-        f1 = freqs[end_bin - 1] if end_bin > start_bin else freqs[start_bin]
-        bands_hz.append((f0, f1))
+    # Preparar ventana
+    if window is None or window.lower() == "none" or window == "rect":
+        w = np.ones(segment_size)
+    else:
+        w = get_window(window, segment_size, fftbins=True)
     
-    # ========== NORMALIZACIÓN LOGARÍTMICA ==========
-    # Usar escala log para hacer comparaciones más robustas
+    # ========== PASO 4: CALCULAR ENERGÍA DE CADA SEGMENTO ==========
+    
+    for i in range(K):
+        # Extraer segmento i del audio
+        start_idx = i * segment_size
+        end_idx = start_idx + segment_size if i < K - 1 else N
+        segment = xN[start_idx:end_idx]
+        
+        # Ajustar tamaño del segmento si es necesario
+        if len(segment) < segment_size:
+            segment = np.pad(segment, (0, segment_size - len(segment)))
+        elif len(segment) > segment_size:
+            segment = segment[:segment_size]
+    
+
+        segment_windowed = segment * w    
+
+        X_segment = np.fft.rfft(segment_windowed, n=segment_size)
+    
+        energy = np.sum(np.abs(X_segment) ** 2)
+        Es[i] = float(energy)
+        
+        # Calcular rango de tiempo (y frecuencia dominante) de este segmento
+        # Para compatibilidad con visualización
+        freqs_segment = np.fft.rfftfreq(segment_size, d=1.0 / fs)
+        f_min = freqs_segment[0]
+        f_max = freqs_segment[-1]
+        bands_hz.append((f_min, f_max))
+    
+    # ========== PASO 5: NORMALIZACIÓN PARA COMPARACIÓN ROBUSTA ==========
+    
+    # Evitar log(0) sumando epsilon pequeño
     Es = np.log10(Es + 1e-10)
     
-    # Normalizar para que sume 1 (distribución relativa de energía)
+    # Normalizar para que la suma sea 1 (distribución relativa de energía)
+    # Esto hace que el reconocimiento sea independiente de la energía total
     E_sum = np.sum(Es)
     if E_sum != 0:
         Es = Es / E_sum
-
+    
+    # Para visualización, generamos frecuencias representativas
+    freqs = np.fft.rfftfreq(segment_size, d=1.0 / fs)
+    
     return Es, np.array(bands_hz), freqs
 
 
