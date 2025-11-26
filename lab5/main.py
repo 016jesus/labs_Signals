@@ -88,9 +88,9 @@ class Lab5GUI:
         self.dir_var = tk.StringVar(value=RECORDINGS_DIR)
         
         # Etiquetas para 3 comandos
-        self.labA_var = tk.StringVar(value="A")
-        self.labB_var = tk.StringVar(value="B")
-        self.labC_var = tk.StringVar(value="C")
+        self.labA_var = tk.StringVar(value="segmentar")
+        self.labB_var = tk.StringVar(value="cifrar")
+        self.labC_var = tk.StringVar(value="comprimir")
         
         self.status_var = tk.StringVar(value="Listo.")
         self.file_path_var = tk.StringVar(value="(ningún archivo)")
